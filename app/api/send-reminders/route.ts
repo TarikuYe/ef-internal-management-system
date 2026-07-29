@@ -151,7 +151,7 @@ async function handle(request: Request) {
     } else {
       // Fallback to Resend
       const apiKey = process.env.RESEND_API_KEY
-      const from = process.env.REMINDER_FROM ?? 'EF Report Portal <onboarding@resend.dev>'
+      const from = process.env.REMINDER_FROM ?? 'EF Internal Management Portal <onboarding@resend.dev>'
 
       if (!apiKey) {
         console.log(

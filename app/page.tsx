@@ -25,12 +25,12 @@ const features = [
   {
     icon: FolderKanban,
     title: 'Project Records',
-    desc: 'Track correspondence registers, contractor bonds, Extension of Time (EOT) claims, and project assignments — all in one place.',
+    desc: 'Track correspondence registers, contractor bonds, Extension of Time (EOT) claims, and project assignments  all in one place.',
   },
   {
     icon: BarChart3,
     title: 'Performance Evaluations',
-    desc: 'Score employees across six weighted dimensions — technical competence, productivity, punctuality, communication, reporting, and adaptability.',
+    desc: 'Score employees across six weighted dimensions  technical competence, productivity, punctuality, communication, reporting, and adaptability.',
   },
   {
     icon: ShieldCheck,
@@ -57,17 +57,26 @@ const stats = [
 
 const steps = [
   {
-    role: 'Engineers',
+    role: 'Administartor',
+    text: 'Manage users, roles, permissions, departments, logs, backups, health checks, email settings, and more from the admin dashboard.',
+  },
+  {
+    role: 'RBAC',
+    text: 'Role-Based Access Control (RBAC) is a system that controls access to resources based on user roles and permissions.',
+  },
+  {
+    role: 'Employees',
     text: 'Sign in and log your weekly tasks, hours worked, and daily progress directly in your workspace.',
   },
-  {
-    role: 'Registrars',
-    text: 'Manage correspondence, bonds, EOT claims, and performance evaluations from the admin dashboard.',
-  },
-  {
-    role: 'DGM',
-    text: 'Access the analytics control tower for a live overview of all employees, projects, and submissions.',
-  },
+  // {
+  //   role: 'Registrars',
+  //   text: 'Manage correspondence, bonds, EOT claims, and performance evaluations from the admin dashboard.',
+  // },
+  // {
+  //   role: 'DGM',
+  //   text: 'Access the analytics control tower for a live overview of all employees, projects, and submissions.',
+  // }
+
 ]
 
 export default async function HomePage() {
@@ -131,9 +140,8 @@ export default async function HomePage() {
                 Internal management portal for your entire team
               </h1>
               <p className="mx-auto mt-5 max-w-xl text-pretty text-base leading-relaxed text-primary-foreground/75 sm:text-lg">
-                One platform for weekly timesheets, correspondence tracking, contractor bonds, EOT
-                claims, performance evaluations, and project management — built for EF A&amp;E staff
-                from engineer to DGM.
+                One platform for weekly reports (timesheets), correspondence tracking, contractor bonds, EOT
+                claims, performance evaluations, and project management  built for <span className="text-accent">EF Architects &amp; Engineering Consulting PLC</span>  from engineer to DGM.
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <Link
@@ -171,10 +179,10 @@ export default async function HomePage() {
               What the portal covers
             </h2>
             <p className="mt-2 text-muted-foreground">
-              A complete management system built around how EF A&amp;E teams actually work.
+              A complete management system built around how EF Architects &amp; Engineering Consulting PLC teams actually work.
             </p>
           </div>
-          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-12 grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((f) => (
               <Card
                 key={f.title}
@@ -209,7 +217,7 @@ export default async function HomePage() {
                 </h2>
                 <p className="mt-3 max-w-md text-muted-foreground">
                   Sign in once and the portal takes you straight to the right workspace. No manual
-                  navigation, no irrelevant menus — just the tools for your role.
+                  navigation, no irrelevant menus  just the tools for your role.
                 </p>
               </div>
               <ol className="space-y-4">
@@ -260,7 +268,7 @@ export default async function HomePage() {
 
       <footer className="border-t border-border bg-secondary/40">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:px-6">
-          <p>© {new Date().getFullYear()} EF Architects &amp; Engineers Consulting PLC. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} EF Architects &amp; Engineering Consulting PLC. All rights reserved.</p>
           <p>Internal management portal</p>
         </div>
       </footer>

@@ -35,8 +35,12 @@ export function SubmissionForm({
   defaultEmail?: string
   onSuccess?: () => void
 }) {
-  const { data: projectsData } = useSWR<{ projects: Project[] }>('/api/projects?mine=1', fetcher)
-  const projects = projectsData?.projects ?? FALLBACK_PROJECTS
+  const { data: projectsData } = useSWR<{ projects: Project[] }>(
+    '/api/projects?mine=1',
+    fetcher,
+    { refreshInterval: 5_000 }
+  )
+  const projects = projectsData?.projects ?? []
 
   const [name, setName] = useState(defaultName)
   const [email, setEmail] = useState(defaultEmail)

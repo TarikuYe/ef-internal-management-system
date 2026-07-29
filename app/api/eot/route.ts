@@ -6,14 +6,19 @@ import { sendEOTNotification } from '@/lib/email-service'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-async function checkAdminOrDgm(userId: string) {
+async function checkEOTAccess(userId: string) {
   const admin = createAdminClient()
   const { data: employee } = await admin
     .from('employees')
-    .select('role')
+    .select('role, department_id')
     .eq('id', userId)
     .maybeSingle()
-  return employee?.role === 'admin' || employee?.role === 'dgm'
+  return (
+    employee?.role === 'admin' ||
+    employee?.role === 'dgm' ||
+    employee?.role === 'registrar' ||
+    employee?.department_id === 'contract'
+  )
 }
 
 // GET /api/eot
@@ -78,9 +83,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     }
 
-    const hasAccess = await checkAdminOrDgm(user.id)
+    const hasAccess = await checkEOTAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin or DGM access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Authorized role or Contract department access required.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -167,9 +172,9 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     }
 
-    const hasAccess = await checkAdminOrDgm(user.id)
+    const hasAccess = await checkEOTAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin or DGM access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Authorized role or Contract department access required.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -223,9 +228,9 @@ export async function DELETE(request: Request) {
     if (!user) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     }
-    const hasAccess = await checkAdminOrDgm(user.id)
+    const hasAccess = await checkEOTAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin or DGM access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Authorized role or Contract department access required.' }, { status: 403 })
     }
 
     const body = await request.json()

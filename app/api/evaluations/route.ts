@@ -5,14 +5,19 @@ import { createAdminClient } from '@/lib/supabase/admin'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-async function checkAdminOrDgm(userId: string) {
+async function checkEvaluationsWriteAccess(userId: string) {
   const admin = createAdminClient()
   const { data: employee } = await admin
     .from('employees')
-    .select('role')
+    .select('role, department_id')
     .eq('id', userId)
     .maybeSingle()
-  return employee?.role === 'admin' || employee?.role === 'dgm' || employee?.role === 'registrar'
+  return (
+    employee?.role === 'admin' ||
+    employee?.role === 'dgm' ||
+    employee?.role === 'registrar' ||
+    (employee?.role === 'manager' && employee?.department_id === 'contract')
+  )
 }
 
 // GET /api/evaluations
@@ -29,7 +34,7 @@ export async function GET(request: Request) {
     const admin = createAdminClient()
     const { data: currentEmp } = await admin
       .from('employees')
-      .select('id, role')
+      .select('id, role, department_id')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -45,12 +50,58 @@ export async function GET(request: Request) {
       .select('*, employees(full_name, email, department)')
       .order('evaluation_period_end', { ascending: false })
 
-    if (currentEmp.role !== 'admin' && currentEmp.role !== 'dgm' && currentEmp.role !== 'registrar') {
-      // Engineer role: restrict query to their own ID
+    if (currentEmp.role === 'admin' || currentEmp.role === 'dgm') {
+      // True cross-dept executives see everything
+      if (targetEmployeeId) {
+        query = query.eq('employee_id', targetEmployeeId)
+      }
+    } else if (
+      (currentEmp.role === 'manager' && currentEmp.department_id === 'contract') ||
+      currentEmp.role === 'registrar'
+    ) {
+      // Contract Admin manager AND registrar (who is IN contract dept) — both see contract dept only
+      if (targetEmployeeId) {
+        const { data: targetEmp } = await admin
+          .from('employees')
+          .select('department_id')
+          .eq('id', targetEmployeeId)
+          .maybeSingle()
+        if (targetEmp?.department_id === 'contract') {
+          query = query.eq('employee_id', targetEmployeeId)
+        } else {
+          return NextResponse.json({ error: 'Permission denied.' }, { status: 403 })
+        }
+      } else {
+        const { data: contractEmps } = await admin
+          .from('employees')
+          .select('id')
+          .eq('department_id', 'contract')
+        const empIds = (contractEmps ?? []).map(e => e.id)
+        query = query.in('employee_id', empIds)
+      }
+    } else if (currentEmp.role === 'manager') {
+      // Manager in any other department — scoped to their own dept
+      if (targetEmployeeId) {
+        const { data: targetEmp } = await admin
+          .from('employees')
+          .select('department_id')
+          .eq('id', targetEmployeeId)
+          .maybeSingle()
+        if (targetEmp?.department_id === currentEmp.department_id) {
+          query = query.eq('employee_id', targetEmployeeId)
+        } else {
+          return NextResponse.json({ error: 'Permission denied.' }, { status: 403 })
+        }
+      } else {
+        const { data: deptEmps } = await admin
+          .from('employees')
+          .select('id')
+          .eq('department_id', currentEmp.department_id)
+        const empIds = (deptEmps ?? []).map(e => e.id)
+        query = query.in('employee_id', empIds)
+      }
+    } else {
       query = query.eq('employee_id', currentEmp.id)
-    } else if (targetEmployeeId) {
-      // Admin/DGM/Registrar filtering by employee
-      query = query.eq('employee_id', targetEmployeeId)
     }
 
     const { data: evaluations, error } = await query
@@ -77,9 +128,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     }
 
-    const hasAccess = await checkAdminOrDgm(user.id)
+    const hasAccess = await checkEvaluationsWriteAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin or DGM access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Admin, DGM, or Contract Manager access required.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -137,9 +188,9 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     }
 
-    const hasAccess = await checkAdminOrDgm(user.id)
+    const hasAccess = await checkEvaluationsWriteAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin or DGM access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Admin, DGM, or Contract Manager access required.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -192,9 +243,9 @@ export async function DELETE(request: Request) {
     if (!user) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     }
-    const hasAccess = await checkAdminOrDgm(user.id)
+    const hasAccess = await checkEvaluationsWriteAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin or DGM access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Admin, DGM, or Contract Manager access required.' }, { status: 403 })
     }
 
     const body = await request.json()

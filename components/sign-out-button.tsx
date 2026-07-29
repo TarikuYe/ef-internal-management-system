@@ -1,17 +1,17 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { setSigningOut } from '@/lib/sign-out-state'
 import { LogOut } from 'lucide-react'
 
 export function SignOutButton({ className }: { className?: string }) {
-  const router = useRouter()
-
   async function handleSignOut() {
+    // Set flag BEFORE sign-out so the header's onAuthStateChange listener
+    // knows not to flash the unauthenticated UI while we navigate away.
+    setSigningOut(true)
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/auth/signin')
-    router.refresh()
+    window.location.href = '/auth/signin'
   }
 
   return (

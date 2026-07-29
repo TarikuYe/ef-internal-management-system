@@ -70,7 +70,7 @@ function SignInForm() {
                 Welcome back
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Sign in to the EF A&E Report Portal
+                Sign in to the EF A&E Internal Management Portal
               </p>
             </div>
 

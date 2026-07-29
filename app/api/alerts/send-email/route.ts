@@ -11,10 +11,14 @@ async function checkAdminAccess(userId: string) {
   const admin = createAdminClient()
   const { data: employee } = await admin
     .from('employees')
-    .select('role')
+    .select('role, department_id')
     .eq('id', userId)
     .maybeSingle()
-  return employee?.role === 'dgm' || employee?.role === 'admin'
+  return (
+    employee?.role === 'dgm' ||
+    employee?.role === 'admin' ||
+    (employee?.role === 'manager' && employee?.department_id === 'contract')
+  )
 }
 
 export async function POST(request: Request) {
@@ -48,7 +52,8 @@ export async function POST(request: Request) {
         expiryDate: item.expiry_date,
         amount: item.amount ? Number(item.amount).toLocaleString() + ' ETB' : undefined,
         daysOverdue: Number(item.days_overdue || 0),
-        message: message
+        message: message,
+        recipientName: item.contractor_name,
       })
     } else if (type === 'eot') {
       html = eotAlertEmailHtml({
@@ -58,7 +63,8 @@ export async function POST(request: Request) {
         daysApproved: String(item.days_approved || 0),
         claimNumber: String(item.eot_number || 1),
         daysRemaining: Number(item.days_remaining || 0),
-        message: message
+        message: message,
+        recipientName: item.contractor_name,
       })
     } else {
       return NextResponse.json({ error: 'Invalid alert type. Must be "bond" or "eot".' }, { status: 400 })

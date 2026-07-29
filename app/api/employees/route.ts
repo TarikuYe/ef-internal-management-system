@@ -16,13 +16,22 @@ async function checkAdminOrDgm(userId: string, userEmail: string, allowRegistrar
   const admin = createAdminClient()
   const { data: employee } = await admin
     .from('employees')
-    .select('role')
+    .select('role, department_id')
     .eq('id', userId)
     .maybeSingle()
   if (allowRegistrar) {
-    return employee?.role === 'admin' || employee?.role === 'dgm' || employee?.role === 'registrar'
+    return (
+      employee?.role === 'admin' ||
+      employee?.role === 'dgm' ||
+      employee?.role === 'registrar' ||
+      (employee?.role === 'manager' && employee?.department_id === 'contract')
+    )
   }
-  return employee?.role === 'admin' || employee?.role === 'dgm'
+  return (
+    employee?.role === 'admin' ||
+    employee?.role === 'dgm' ||
+    (employee?.role === 'manager' && employee?.department_id === 'contract')
+  )
 }
 
 function generateTempPassword(): string {
@@ -46,11 +55,30 @@ export async function GET(_request: Request) {
       return NextResponse.json({ error: 'Admin access required.' }, { status: 403 })
     }
 
+    // Determine if caller is a contract manager or registrar — scope results to contract dept
     const admin = createAdminClient()
-    const { data: profiles, error } = await admin
+    const { data: caller } = await admin
+      .from('employees')
+      .select('role, department_id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const isContractScopedRole =
+      caller?.role === 'registrar' ||
+      (caller?.role === 'manager' && caller?.department_id === 'contract')
+
+    let query = admin
       .from('employees')
       .select('*')
+      .not('role', 'eq', 'admin')
       .order('created_at', { ascending: true })
+
+    // Contract managers and registrars only see their own department
+    if (isContractScopedRole) {
+      query = query.eq('department_id', 'contract')
+    }
+
+    const { data: profiles, error } = await query
 
     if (error) {
       console.log('[employees] GET error:', error.message)
@@ -102,8 +130,8 @@ export async function POST(request: Request) {
     const body = await request.json()
     const fullName = String(body.full_name ?? '').trim()
     const email = String(body.email ?? '').trim().toLowerCase()
-    const department = String(body.department ?? '').trim()
-    const role = String(body.role ?? '').trim() || 'engineer'
+    const departmentId = String(body.department_id ?? body.department ?? '').trim() || 'contract'
+    const role = String(body.role ?? '').trim() || 'employee'
 
     if (!fullName || !email) {
       return NextResponse.json({ error: 'Full name and email are required.' }, { status: 400 })
@@ -141,7 +169,7 @@ export async function POST(request: Request) {
         id: newUserId,
         full_name: fullName,
         email,
-        department: department || 'Procurement and Contract Administration',
+        department_id: departmentId,
         role: role,
       })
       .select()
@@ -193,7 +221,7 @@ export async function PATCH(request: Request) {
       } else {
         await admin.auth.admin.updateUserById(id, { ban_duration: 'none' })
       }
-      if (body.full_name === undefined && body.department === undefined && body.role === undefined) {
+      if (body.full_name === undefined && body.department_id === undefined && body.department === undefined && body.role === undefined) {
         return NextResponse.json({ employee: { id, active: body.active } })
       }
     }
@@ -202,23 +230,30 @@ export async function PATCH(request: Request) {
     if (typeof body.full_name === 'string' && body.full_name.trim()) {
       updates.full_name = body.full_name.trim()
     }
-    if (typeof body.department === 'string') {
-      updates.department = body.department.trim() || null
+    const deptId: string | undefined =
+      typeof body.department_id === 'string' ? body.department_id.trim() || undefined
+      : typeof body.department === 'string'  ? body.department.trim()    || undefined
+      : undefined
+    if (deptId !== undefined) {
+      updates.department_id = deptId || null
     }
     if (typeof body.role === 'string') {
-      updates.role = body.role.trim() || 'engineer'
+      updates.role = body.role.trim() || 'employee'
     }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 })
     }
 
-    const { data, error } = await admin
-      .from('employees')
-      .update(updates)
-      .eq('id', id)
-      .select('*')
-      .single()
+    // Use the safe RPC that disables triggers for this transaction.
+    // This prevents the broken sync trigger from writing a display-name string
+    // into the ef_department enum column (which would cause a 500).
+    const { data, error } = await admin.rpc('patch_employee_safe', {
+      p_id:            id,
+      p_full_name:     (updates.full_name as string)     ?? null,
+      p_department_id: (updates.department_id as string) ?? null,
+      p_role:          (updates.role as string)          ?? null,
+    }).select().single()
 
     if (error) {
       console.log('[employees] PATCH error:', error.message)

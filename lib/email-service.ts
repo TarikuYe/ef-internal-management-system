@@ -44,7 +44,7 @@ export async function sendNotificationEmail(config: EmailConfig): Promise<boolea
       const resend = new Resend(process.env.RESEND_API_KEY)
       
       await resend.emails.send({
-        from: config.from || process.env.REMINDER_FROM || 'EF Report Portal <noreply@efae.com>',
+        from: config.from || process.env.REMINDER_FROM || 'EF Internal Management Portal <noreply@efae.com>',
         to: config.to,
         subject: config.subject,
         html: config.html,

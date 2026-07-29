@@ -49,9 +49,28 @@ export default async function EmployeeProjectsPage() {
     console.error('[employee/projects] assignment fetch error:', assignErr.message)
   }
 
-  const assignedCodes = (assignmentRows ?? []).map(
+  let assignedCodes = (assignmentRows ?? []).map(
     (a: { project_code: string }) => a.project_code,
   )
+
+  if (assignedCodes.length === 0 && user.email) {
+    const { data: emp } = await adminClient
+      .from('employees')
+      .select('id')
+      .eq('email', user.email.toLowerCase())
+      .maybeSingle()
+
+    if (emp?.id && emp.id !== user.id) {
+      const { data: altRows } = await adminClient
+        .from('employee_project_assignments')
+        .select('project_code')
+        .eq('employee_id', emp.id)
+
+      assignedCodes = (altRows ?? []).map(
+        (a: { project_code: string }) => a.project_code,
+      )
+    }
+  }
 
   // ── Resolve full project rows ─────────────────────────────────────────────
   // Use select('*') so this works even if the extended columns (client,

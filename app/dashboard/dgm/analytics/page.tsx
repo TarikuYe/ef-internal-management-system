@@ -89,10 +89,10 @@ export default function DGMAnalyticsPage() {
     
     if (type === 'bond') {
       setEmailSubject(`ALERT: Expired Bond on Project "${item.project_name}"`)
-      setEmailMessage(`Dear Project Management Team,\n\nThis is an automated notification regarding the following expired contract bond:\n- Project Description: ${item.project_name}\n- Contractor Name: ${item.contractor_name}\n- Bond Type: ${item.bond_type}\n- Expiry Date: ${item.expiry_date}\n- Amount: ${item.amount ? Number(item.amount).toLocaleString() + ' ETB' : 'Not specified'}\n\nStatus Calculation:\nDue Date of ${item.expiry_date} has passed. This bond is currently ${item.days_overdue || 0} days OVERDUE.\n\nImmediate action is required to ensure contract security or process bond release.`)
+      setEmailMessage(`Dear ${item.contractor_name},\n\nThis is a formal notification regarding the following expired contract bond:\n- Project Description: ${item.project_name}\n- Contractor Name: ${item.contractor_name}\n- Bond Type: ${item.bond_type}\n- Expiry Date: ${item.expiry_date}\n- Amount: ${item.amount ? Number(item.amount).toLocaleString() + ' ETB' : 'Not specified'}\n\nStatus Calculation:\nDue Date of ${item.expiry_date} has passed. This bond is currently ${item.days_overdue || 0} days OVERDUE.\n\nImmediate action is required to ensure contract security or process bond release.`)
     } else {
       setEmailSubject(`ATTENTION: Nearly Expired Timeline on Project "${item.project_name}"`)
-      setEmailMessage(`Dear Project Supervision Team,\n\nPlease review the revised contract timeline details:\n- Project Description: ${item.project_name}\n- Contractor Name: ${item.contractor_name}\n- Revised Completion Date: ${item.revised_completion_date} (EOT Approved)\n- Days Approved: ${item.days_approved} days\n- EOT Number: Claim #${item.eot_number}\n\nStatus Calculation:\nOnly ${item.days_remaining || 0} days remaining until deadline.\n\nPlease verify the contractor's on-site execution speed and execute necessary supervision actions.`)
+      setEmailMessage(`Dear ${item.contractor_name},\n\nPlease review the revised contract timeline details:\n- Project Description: ${item.project_name}\n- Contractor Name: ${item.contractor_name}\n- Revised Completion Date: ${item.revised_completion_date} (EOT Approved)\n- Days Approved: ${item.days_approved} days\n- EOT Number: Claim #${item.eot_number}\n\nStatus Calculation:\nOnly ${item.days_remaining || 0} days remaining until deadline.\n\nPlease verify the contractor's on-site execution speed and execute necessary supervision actions.`)
     }
     
     setEmailModalOpen(true)
@@ -293,8 +293,8 @@ DGM Office — EF Architects and Engineers Consulting PLC`
                 <span className="size-1.5 rounded-full bg-white" />
               </span>
             </div>
-            <div>
-              <h1 className="font-display text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
+            <div className="min-w-0">
+              <h1 className="font-display text-xl font-extrabold tracking-tight text-foreground sm:text-3xl">
                 DGM Control Tower
               </h1>
               <p className="mt-0.5 text-sm text-muted-foreground">
@@ -304,7 +304,10 @@ DGM Office — EF Architects and Engineers Consulting PLC`
           </div>
           <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
             <button
-              onClick={() => { mutate(); mutatePendingLogs(); }}
+              onClick={() => {
+                mutate()
+                mutatePendingLogs()
+              }}
               disabled={isLoading}
               className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground shadow-sm transition-all hover:border-primary/30 hover:bg-secondary hover:text-foreground"
               title="Refresh data"
@@ -348,7 +351,7 @@ DGM Office — EF Architects and Engineers Consulting PLC`
         )}
 
         {/* ── CORE ANALYTICS BANNER ── */}
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mb-8 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           
           {/* Letters Widget */}
           <Card className="group relative overflow-hidden border-border/60 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
@@ -605,7 +608,7 @@ DGM Office — EF Architects and Engineers Consulting PLC`
               {/* Clicking the backdrop will close the sheet */}
               <div className="absolute inset-0 -z-10" onClick={() => setSelectedEmployeeEmail(null)} />
               
-              <div className="relative flex h-full w-full flex-col border-l border-border bg-background shadow-2xl animate-in slide-in-from-right duration-300 sm:max-w-4xl">
+              <div className="relative flex h-full w-full flex-col border-l border-border bg-background shadow-2xl animate-in slide-in-from-right duration-300 md:max-w-4xl">
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-border bg-gradient-to-r from-slate-500/5 to-transparent p-4 sm:p-6">
                   <div className="flex items-center gap-3 sm:gap-4">
@@ -723,7 +726,7 @@ DGM Office — EF Architects and Engineers Consulting PLC`
 
 
         {/* ── HIGH-PRIORITY ALERT INBOX ── */}
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           
           {/* Critical Bond Expiry (Red Alerts) */}
           <Card className="overflow-hidden border-border/60 shadow-sm">

@@ -41,10 +41,64 @@ interface Employee {
   full_name: string
   email: string
   department: string | null
+  department_id: string | null
   role: string
   active?: boolean   // optional – column may not exist in older DB schemas
   created_at: string
   employee_project_assignments?: Assignment[]
+}
+
+const DEPARTMENTS: { id: string; name: string }[] = [
+  { id: 'contract',    name: 'Contract Administration' },
+  { id: 'design',      name: 'Design Department' },
+  { id: 'office-eng',  name: 'Office Engineering' },
+  { id: 'procurement', name: 'Procurement' },
+  { id: 'supervision', name: 'Supervision & Water Works' },
+]
+
+const ROLES: { value: string; label: string }[] = [
+  { value: 'employee',   label: 'Employee' },
+  { value: 'manager',    label: 'Manager' },
+  { value: 'registrar',  label: 'Registrar' },
+  { value: 'dgm',        label: 'DGM' },
+  { value: 'gm',         label: 'GM' },
+  { value: 'admin',      label: 'Admin' },
+]
+
+// Maps legacy ef_department enum values to new department IDs
+const OLD_DEPT_TO_ID: Record<string, string> = {
+  management:         'contract',
+  contract_admin:     'contract',
+  office_engineering: 'office-eng',
+  design:             'design',
+  procurement:        'procurement',
+  supervision:        'supervision',
+}
+
+// Returns a human-readable department name regardless of which column is populated
+function getDeptDisplay(emp: { department_id?: string | null; department?: string | null }): string {
+  if (emp.department_id) {
+    return DEPARTMENTS.find(d => d.id === emp.department_id)?.name ?? emp.department_id
+  }
+  if (emp.department) {
+    // Check if it matches a new department ID first
+    const byId = DEPARTMENTS.find(d => d.id === emp.department)
+    if (byId) return byId.name
+    // Format old enum value: contract_admin → Contract Admin
+    return emp.department.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  }
+  return '—'
+}
+
+// Returns the best department_id to pre-fill the edit dropdown
+function getEditDeptId(emp: { department_id?: string | null; department?: string | null }): string {
+  if (emp.department_id && DEPARTMENTS.some(d => d.id === emp.department_id)) {
+    return emp.department_id
+  }
+  if (emp.department) {
+    return OLD_DEPT_TO_ID[emp.department] ?? 'contract'
+  }
+  return 'contract'
 }
 
 export function EmployeeManager() {
@@ -110,7 +164,7 @@ export function EmployeeManager() {
       const res = await fetch('/api/employees', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_name: newName, email: newEmail, department: newDept, role: newRole }),
+        body: JSON.stringify({ full_name: newName, email: newEmail, department_id: (['dgm','gm'].includes(newRole)) ? null : (newDept || 'contract'), role: newRole || 'employee' }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Failed to create employee.')
@@ -136,7 +190,7 @@ export function EmployeeManager() {
       const res = await fetch('/api/employees', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, full_name: editName, department: editDept, role: editRole }),
+        body: JSON.stringify({ id, full_name: editName, department_id: editDept, role: editRole }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Update failed.')
@@ -369,24 +423,44 @@ export function EmployeeManager() {
                     required
                   />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Department</label>
-                  <Input
-                    id="new-emp-dept"
-                    placeholder="e.g. Architecture"
-                    value={newDept}
-                    onChange={(e) => setNewDept(e.target.value)}
-                  />
-                </div>
+                {/* Department — hidden for DGM / GM roles */}
+                {!['dgm', 'gm'].includes(newRole) && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Department</label>
+                    <select
+                      id="new-emp-dept"
+                      value={newDept}
+                      onChange={(e) => setNewDept(e.target.value)}
+                      className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="contract">Contract Administration</option>
+                      <option value="design">Design Department</option>
+                      <option value="office-eng">Office Engineering</option>
+                      <option value="procurement">Procurement</option>
+                      <option value="supervision">Supervision &amp; Water Works</option>
+                    </select>
+                  </div>
+                )}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Role</label>
-                  <Input
+                  <select
                     id="new-emp-role"
-                    placeholder="e.g. Engineer"
                     value={newRole}
                     onChange={(e) => setNewRole(e.target.value)}
-                  />
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
                 </div>
+                {/* Info note for executive roles */}
+                {['dgm', 'gm'].includes(newRole) && (
+                  <div className="sm:col-span-2 flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2.5 text-xs text-indigo-700">
+                    <svg className="size-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z" /></svg>
+                    <span><strong className="font-semibold capitalize">{newRole.toUpperCase()}</strong> is an executive role — no department assignment required.</span>
+                  </div>
+                )}
               </div>
               <Button type="submit" disabled={adding} className="sm:self-start">
                 {adding ? (
@@ -429,7 +503,8 @@ export function EmployeeManager() {
                   const isExpanded = expandedId === emp.id
                   const assignedCodes = assignmentMap.get(emp.id) ?? new Set<string>()
                   const roleBadgeClass =
-                    emp.role === 'dgm' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                    emp.role === 'dgm'  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                    : emp.role === 'gm'    ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
                     : emp.role === 'admin' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
                     : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
                   return (
@@ -457,7 +532,7 @@ export function EmployeeManager() {
                             </>
                           ) : (
                             <>
-                              <button onClick={() => { setEditingId(emp.id); setEditName(emp.full_name); setEditDept(emp.department ?? ''); setEditRole(emp.role ?? 'engineer') }} className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label={`Edit ${emp.full_name}`}><Pencil className="size-3.5" /></button>
+                              <button onClick={() => { setEditingId(emp.id); setEditName(emp.full_name); setEditDept(getEditDeptId(emp)); setEditRole(emp.role ?? 'employee') }} className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label={`Edit ${emp.full_name}`}><Pencil className="size-3.5" /></button>
                               <button onClick={() => setExpandedId(isExpanded ? null : emp.id)} className={`inline-flex h-8 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors ${isExpanded ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:bg-secondary hover:text-foreground'}`}>
                                 Projects{isExpanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
                               </button>
@@ -473,13 +548,17 @@ export function EmployeeManager() {
                       </div>
                       {editingId === emp.id && (
                         <div className="mt-2 grid grid-cols-2 gap-2">
-                          <Input value={editDept} onChange={(e) => setEditDept(e.target.value)} className="h-8 text-sm" placeholder="Department" />
-                          <Input value={editRole} onChange={(e) => setEditRole(e.target.value)} className="h-8 text-sm" placeholder="Role" />
+                          <select value={editDept} onChange={(e) => setEditDept(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+                            {DEPARTMENTS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                          </select>
+                          <select value={editRole} onChange={(e) => setEditRole(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+                            {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                          </select>
                         </div>
                       )}
                       {editingId !== emp.id && (
                         <div className="mt-1.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          {emp.department && <span>{emp.department}</span>}
+                          <span>{getDeptDisplay(emp)}</span>
                           {[...assignedCodes].map((code) => (
                             <span key={code} className="inline-flex items-center rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">{code}</span>
                           ))}
@@ -529,6 +608,8 @@ export function EmployeeManager() {
                     const roleBadgeClass =
                       emp.role === 'dgm'
                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        : emp.role === 'gm'
+                        ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
                         : emp.role === 'admin'
                         ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
                         : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
@@ -557,17 +638,20 @@ export function EmployeeManager() {
 
                           {/* Department */}
                           <TableCell>
-                            {editingId === emp.id ? (
-                              <Input
+                            {['dgm', 'gm'].includes(emp.role) ? (
+                              <span className="text-xs text-muted-foreground italic">—</span>
+                            ) : editingId === emp.id ? (
+                              <select
                                 id={`edit-dept-${emp.id}`}
                                 value={editDept}
                                 onChange={(e) => setEditDept(e.target.value)}
-                                className="h-8 text-sm"
-                                placeholder="Department"
-                              />
+                                className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                              >
+                                {DEPARTMENTS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                              </select>
                             ) : (
                               <span className="text-sm text-muted-foreground">
-                                {emp.department ?? '—'}
+                                {getDeptDisplay(emp)}
                               </span>
                             )}
                           </TableCell>
@@ -575,13 +659,14 @@ export function EmployeeManager() {
                           {/* Role */}
                           <TableCell>
                             {editingId === emp.id ? (
-                              <Input
+                              <select
                                 id={`edit-role-${emp.id}`}
                                 value={editRole}
                                 onChange={(e) => setEditRole(e.target.value)}
-                                className="h-8 text-sm w-32"
-                                placeholder="Role"
-                              />
+                                className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                              >
+                                {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                              </select>
                             ) : (
                               <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${roleBadgeClass}`}>
                                 {emp.role}
@@ -650,8 +735,8 @@ export function EmployeeManager() {
                                     onClick={() => {
                                       setEditingId(emp.id)
                                       setEditName(emp.full_name)
-                                      setEditDept(emp.department ?? '')
-                                      setEditRole(emp.role ?? 'engineer')
+                                      setEditDept(getEditDeptId(emp))
+                                      setEditRole(emp.role ?? 'employee')
                                     }}
                                     className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                                     aria-label={`Edit ${emp.full_name}`}

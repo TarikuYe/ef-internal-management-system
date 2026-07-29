@@ -26,8 +26,8 @@ async function getOrCreateEmployee(userId: string, email: string, fullName: stri
       id: userId,
       full_name: fullName || email.split('@')[0],
       email: email,
-      role: isDGM ? 'dgm' : 'engineer',
-      department: 'Procurement and Contract Administration',
+      role: isDGM ? 'dgm' : 'employee',
+      department_id: isDGM ? null : 'contract',
     })
     .select()
     .single()
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
     let query
 
     if (pendingOnly) {
-      if (currentEmp.role !== 'admin' && currentEmp.role !== 'dgm') {
+      if (currentEmp.role !== 'admin' && currentEmp.role !== 'dgm' && currentEmp.role !== 'manager') {
         return NextResponse.json({ error: 'Permission denied.' }, { status: 403 })
       }
       // Fetch all logs with their reviews so we can filter to only those whose
@@ -77,15 +77,25 @@ export async function GET(request: Request) {
       query = admin
         .from('daily_work_logs')
         .select(
-          '*, employees(full_name, email, department, role), daily_work_log_reviews(approval_status, head_comments, reviewed_at)',
+          '*, employees(full_name, email, department, role, department_id), daily_work_log_reviews(approval_status, head_comments, reviewed_at)',
         )
         .order('log_date', { ascending: false })
     } else {
       let queryEmployeeId = currentEmp.id
 
       if (targetEmployeeId && targetEmployeeId !== currentEmp.id) {
-        if (currentEmp.role !== 'admin' && currentEmp.role !== 'dgm') {
+        if (currentEmp.role !== 'admin' && currentEmp.role !== 'dgm' && currentEmp.role !== 'manager') {
           return NextResponse.json({ error: 'Permission denied.' }, { status: 403 })
+        }
+        if (currentEmp.role === 'manager') {
+          const { data: targetEmp } = await admin
+            .from('employees')
+            .select('department_id')
+            .eq('id', targetEmployeeId)
+            .maybeSingle()
+          if (!targetEmp || targetEmp.department_id !== currentEmp.department_id) {
+            return NextResponse.json({ error: 'Permission denied.' }, { status: 403 })
+          }
         }
         queryEmployeeId = targetEmployeeId
       }
@@ -93,7 +103,7 @@ export async function GET(request: Request) {
       query = admin
         .from('daily_work_logs')
         .select(
-          '*, employees(full_name, email, department, role), daily_work_log_reviews(approval_status, head_comments, reviewed_at, reviewed_by)',
+          '*, employees(full_name, email, department, role, department_id), daily_work_log_reviews(approval_status, head_comments, reviewed_at, reviewed_by)',
         )
         .eq('employee_id', queryEmployeeId)
         .order('log_date', { ascending: true })
@@ -136,9 +146,14 @@ export async function GET(request: Request) {
     // corrected row (which will have status 'Pending' with no review record).
     // 'Approved' rows are excluded — nothing left to action.
     if (pendingOnly) {
-      const queueLogs = enrichedLogs.filter(
+      let queueLogs = enrichedLogs.filter(
         (log: any) => log.approval_status === 'Pending',
       )
+      if (currentEmp.role === 'manager') {
+        queueLogs = queueLogs.filter(
+          (log: any) => log.employees?.department_id === currentEmp.department_id,
+        )
+      }
       return NextResponse.json({ logs: queueLogs })
     }
 
@@ -263,6 +278,10 @@ export async function POST(request: Request) {
       }
 
       const completionPct = Number(log.completion_percentage ?? 0)
+      const isSaturday = new Date(logDate).getDay() === 6
+      const defaultEntrance = '08:30'
+      const defaultLeave = isSaturday ? '12:30' : '17:30'
+      const defaultH = isSaturday ? 4 : 8
 
       recordsToInsert.push({
         // Always force the authenticated user's own employee_id — never allow spoofing
@@ -270,14 +289,14 @@ export async function POST(request: Request) {
         log_date: logDate,
         assigned_tasks: assignedTasks,
         actual_work_done: actualWorkDone,
-        hours_worked: Number(log.hours_worked ?? 0),
-        actual_working_hour: Number(log.actual_working_hour ?? 0),
+        hours_worked: Number(log.hours_worked || defaultH),
+        actual_working_hour: Number(log.actual_working_hour || defaultH),
         completion_percentage:
           completionPct > 1 ? completionPct / 100 : completionPct,
         done_at_home: !!log.done_at_home,
         remark: log.remark ? String(log.remark).trim() : null,
-        office_entrance_time: log.office_entrance_time || null,
-        office_leave_time: log.office_leave_time || null,
+        office_entrance_time: defaultEntrance,
+        office_leave_time: defaultLeave,
         // approval_status intentionally NOT set here — it starts as 'Pending'
         // and is managed exclusively via the /api/daily-work-logs/review route.
         // returned_log_id is a client-side hint only — never persisted.

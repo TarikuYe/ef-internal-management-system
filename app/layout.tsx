@@ -16,9 +16,9 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'EF Architect & Engineering — Report Portal',
+  title: 'EF Architect & Engineering — Internal Management Portal',
   description:
-    'Secure report submission portal for EF Architect and Engineering. Submit periodic project reports and track submission status.',
+    'Internal management portal for EF Architect and Engineering. Submit periodic project reports and track submission status.',
   generator: 'v0.app',
 }
 

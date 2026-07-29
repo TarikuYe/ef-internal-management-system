@@ -44,7 +44,7 @@ export default function UnauthorizedPage() {
       </main>
 
       <footer className="border-t border-border py-6 text-center text-sm text-muted-foreground">
-        EF Architect &amp; Engineering &middot; Secure Report Portal
+        EF Architect &amp; Engineering &middot; Internal Management Portal
       </footer>
     </div>
   )

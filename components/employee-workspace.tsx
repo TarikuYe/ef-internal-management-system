@@ -363,13 +363,38 @@ export function EmployeeWorkspace({
   const mondayStr = formatDateString(monday)
   const sundayStr = formatDateString(sunday)
 
-  // Fetch week's logs from API — poll every 10 s so admin approvals/returns
-  // are reflected on the employee side without a manual page reload.
+  // Fetch week's logs from API — poll every 3s & listen to Supabase realtime events
   const { data, isLoading, mutate } = useSWR<{ logs: any[] }>(
     `/api/daily-work-logs?start_date=${mondayStr}&end_date=${sundayStr}`,
     fetcher,
-    { refreshInterval: 10_000 }
+    { refreshInterval: 3_000 }
   )
+
+  // Real-time listener for timesheets & reviews changes
+  useEffect(() => {
+    const supabase = createClient()
+    const channel = supabase
+      .channel('gen-emp-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'daily_work_logs' },
+        () => {
+          mutate()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'daily_work_log_reviews' },
+        () => {
+          mutate()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [mutate])
 
   // Sync database logs with local rows state, restoring any localStorage drafts
   // for days that haven't been submitted yet.
@@ -425,20 +450,26 @@ export function EmployeeWorkspace({
           // Skip old Returned rows when a newer non-Returned row exists for the same date.
           if (status === 'Returned' && hasNonReturnedRow) return
 
+          const entrance = log.office_entrance_time ? log.office_entrance_time.substring(0, 5) : '08:30'
+          const leave = log.office_leave_time ? log.office_leave_time.substring(0, 5) : (isSaturday ? '12:30' : '17:30')
+          const autoHours = calcHoursFromTime(entrance, leave, isSaturday)
+          const dbHours = Number(log.hours_worked || 0)
+          const dbOnsite = Number(log.actual_working_hour || 0)
+          const finalHours = dbHours > 0 ? dbHours : (dbOnsite > 0 ? dbOnsite : autoHours)
+          const finalOnsite = dbOnsite > 0 ? dbOnsite : finalHours
+
           mappedRows.push({
             id: log.id,
             log_date: log.log_date,
             assigned_tasks: log.assigned_tasks || '',
             actual_work_done: log.actual_work_done || '',
-            hours_worked: Number(log.hours_worked || 0),
-            actual_working_hour: Number(log.actual_working_hour || 0),
+            hours_worked: finalHours,
+            actual_working_hour: finalOnsite,
             completion_percentage: Number(log.completion_percentage || 0),
             done_at_home: !!log.done_at_home,
             remark: log.remark || '',
-            office_entrance_time: log.office_entrance_time ? log.office_entrance_time.substring(0, 5) : '08:30',
-            office_leave_time: log.office_leave_time ? log.office_leave_time.substring(0, 5) : (isSaturday ? '12:30' : '17:30'),
-            // approval_status and head_comments come from the latest review record
-            // (flattened by the API) — never from a mutation of the original row
+            office_entrance_time: entrance,
+            office_leave_time: leave,
             approval_status: status,
             head_comments: log.head_comments ?? null,
             reviewed_at: log.reviewed_at ?? null,
@@ -479,6 +510,21 @@ export function EmployeeWorkspace({
     setReferenceDate(newRef)
   }
 
+function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean): number {
+  if (!entrance || !leave) return isSaturday ? 4 : 8
+  const [eH, eM] = entrance.split(':').map(Number)
+  const [lH, lM] = leave.split(':').map(Number)
+  if (isNaN(eH) || isNaN(lH)) return isSaturday ? 4 : 8
+  const startMin = eH * 60 + (eM || 0)
+  const endMin = lH * 60 + (lM || 0)
+  let diffMin = endMin - startMin
+  if (diffMin <= 0) return isSaturday ? 4 : 8
+  if (diffMin > 300) {
+    diffMin -= 60
+  }
+  return Math.round((diffMin / 60) * 10) / 10
+}
+
   const handleInputChange = (index: number, field: keyof TimesheetRow, value: any) => {
     // Immutability guard — saved rows are permanently read-only for employees
     const row = localRows[index]
@@ -490,7 +536,14 @@ export function EmployeeWorkspace({
     }
     setLocalRows(prev => {
       const copy = [...prev]
-      copy[index] = { ...copy[index], [field]: value }
+      const updatedRow = { ...copy[index], [field]: value }
+      if (field === 'office_entrance_time' || field === 'office_leave_time') {
+        const isSaturday = new Date(updatedRow.log_date).getDay() === 6
+        const calcH = calcHoursFromTime(updatedRow.office_entrance_time, updatedRow.office_leave_time, isSaturday)
+        updatedRow.hours_worked = calcH
+        updatedRow.actual_working_hour = calcH
+      }
+      copy[index] = updatedRow
       return copy
     })
   }
@@ -676,61 +729,63 @@ export function EmployeeWorkspace({
   return (
     <div className="flex flex-col gap-6">
       {/* Greeting Header Block */}
-      <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-sm">
         <div className="absolute right-0 top-0 translate-x-1/3 -translate-y-1/3 size-36 rounded-full bg-primary/5 blur-2xl" />
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-              <Sparkles className="size-6 text-accent" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-display text-2xl font-extrabold text-foreground">
-                  Hello, {userName}
-                </h1>
-                <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {userRole}
-                </span>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 sm:size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                <Sparkles className="size-5 sm:size-6 text-accent" />
               </div>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {userDepartment} &middot; Active Entry Mode
-              </p>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="font-display text-xl sm:text-2xl font-extrabold text-foreground">
+                    Hello, {userName}
+                  </h1>
+                  <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {userRole}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-0.5 truncate">
+                  {userDepartment} &middot; Active Entry Mode
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="flex flex-col items-start gap-2 sm:items-end sm:self-auto">
-            <EmployeeReportPanel />
-            <div className="flex flex-wrap items-center gap-1 bg-secondary/60 rounded-xl p-1 border border-border w-full sm:w-fit">
-            <button
-              onClick={() => setActiveTab('timesheet')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                activeTab === 'timesheet'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <LayoutDashboard className="size-4" />
-              <span className="hidden xs:inline sm:inline">Timesheet</span>
-            </button>
-            <Link
-              href="/dashboard/employee/projects"
-              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-background/60"
-            >
-              <FolderKanban className="size-4" />
-              <span className="hidden xs:inline sm:inline">My Projects</span>
-            </Link>
-            <button
-              id="tab-settings"
-              onClick={() => setActiveTab('settings')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                activeTab === 'settings'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Settings className="size-4" />
-              <span className="hidden xs:inline sm:inline">Settings</span>
-            </button>
-          </div>
+            <div className="flex flex-col items-start gap-2 sm:items-end sm:self-auto">
+              <EmployeeReportPanel />
+              <div className="flex flex-wrap items-center gap-1 bg-secondary/60 rounded-xl p-1 border border-border w-full sm:w-fit">
+                <button
+                  onClick={() => setActiveTab('timesheet')}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                    activeTab === 'timesheet'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <LayoutDashboard className="size-4" />
+                  <span>Timesheet</span>
+                </button>
+                <Link
+                  href="/dashboard/employee/projects"
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-background/60"
+                >
+                  <FolderKanban className="size-4" />
+                  <span>Projects</span>
+                </Link>
+                <button
+                  id="tab-settings"
+                  onClick={() => setActiveTab('settings')}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                    activeTab === 'settings'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Settings className="size-4" />
+                  <span>Settings</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -766,6 +821,12 @@ export function EmployeeWorkspace({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <EmployeeReportPanel
+                variant="outline"
+                label="Export Work Log"
+                mobileLabel="Export"
+                className="h-9 px-3 text-xs sm:text-sm"
+              />
               <Button
                 variant="outline"
                 onClick={() => setReferenceDate(new Date())}
@@ -868,7 +929,7 @@ export function EmployeeWorkspace({
                               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Office In</label>
                               <input type="time" value={row.office_entrance_time}
                                 onChange={(e) => handleInputChange(index, 'office_entrance_time', e.target.value)}
-                                disabled={locked}
+                                disabled={true}
                                 className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed"
                               />
                             </div>
@@ -876,7 +937,7 @@ export function EmployeeWorkspace({
                               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Office Out</label>
                               <input type="time" value={row.office_leave_time}
                                 onChange={(e) => handleInputChange(index, 'office_leave_time', e.target.value)}
-                                disabled={locked}
+                                disabled={true}
                                 className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed"
                               />
                             </div>
@@ -922,19 +983,15 @@ export function EmployeeWorkspace({
                           <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
                             <div className="flex flex-col gap-1">
                               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Hours</label>
-                              <input type="number" value={row.hours_worked}
-                                onChange={(e) => handleInputChange(index, 'hours_worked', parseFloat(e.target.value) || 0)}
-                                disabled={locked} min="0" max="24" step="0.25"
-                                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs text-center text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed transition"
-                              />
+                              <span className="inline-flex items-center justify-center rounded-md bg-secondary/80 px-2 py-1.5 font-mono text-xs font-semibold text-foreground border border-border/50">
+                                {typeof row.hours_worked === 'number' ? row.hours_worked : (new Date(row.log_date).getDay() === 6 ? 4 : 8)}h
+                              </span>
                             </div>
                             <div className="flex flex-col gap-1">
                               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Onsite Hrs</label>
-                              <input type="number" value={row.actual_working_hour}
-                                onChange={(e) => handleInputChange(index, 'actual_working_hour', parseFloat(e.target.value) || 0)}
-                                disabled={locked} min="0" max="24" step="0.25"
-                                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs text-center text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed transition"
-                              />
+                              <span className="inline-flex items-center justify-center rounded-md bg-emerald-500/10 px-2 py-1.5 font-mono text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                                {typeof row.actual_working_hour === 'number' ? row.actual_working_hour : (new Date(row.log_date).getDay() === 6 ? 4 : 8)}h
+                              </span>
                             </div>
                             <div className="flex flex-col gap-1">
                               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -1137,31 +1194,17 @@ export function EmployeeWorkspace({
                             </TableCell>
 
                             {/* Hours Worked */}
-                            <TableCell className="py-3">
-                              <input
-                                type="number"
-                                value={row.hours_worked}
-                                onChange={(e) => handleInputChange(index, 'hours_worked', parseFloat(e.target.value) || 0)}
-                                disabled={locked}
-                                min="0"
-                                max="24"
-                                step="0.25"
-                                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs text-center text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed transition"
-                              />
+                            <TableCell className="py-3 text-center">
+                              <span className="inline-flex items-center rounded-md bg-secondary/80 px-2.5 py-1 font-mono text-xs font-semibold text-foreground border border-border/50">
+                                {typeof row.hours_worked === 'number' ? row.hours_worked : (new Date(row.log_date).getDay() === 6 ? 4 : 8)}h
+                              </span>
                             </TableCell>
 
                             {/* Onsite active hours */}
-                            <TableCell className="py-3">
-                              <input
-                                type="number"
-                                value={row.actual_working_hour}
-                                onChange={(e) => handleInputChange(index, 'actual_working_hour', parseFloat(e.target.value) || 0)}
-                                disabled={locked}
-                                min="0"
-                                max="24"
-                                step="0.25"
-                                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs text-center text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed transition"
-                              />
+                            <TableCell className="py-3 text-center">
+                              <span className="inline-flex items-center rounded-md bg-emerald-500/10 px-2.5 py-1 font-mono text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                                {typeof row.actual_working_hour === 'number' ? row.actual_working_hour : (new Date(row.log_date).getDay() === 6 ? 4 : 8)}h
+                              </span>
                             </TableCell>
 
                             {/* Completion Slider */}

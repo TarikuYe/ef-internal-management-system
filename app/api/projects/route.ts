@@ -1,12 +1,27 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { PROJECTS } from '@/lib/reports'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-function isDGM(email: string) {
-  return email.toLowerCase() === process.env.DGM_EMAIL?.toLowerCase()
+async function checkProjectsWriteAccess(userId: string, email: string) {
+  if (process.env.DGM_EMAIL && email.toLowerCase() === process.env.DGM_EMAIL.toLowerCase()) {
+    return true
+  }
+  const admin = createAdminClient()
+  const { data: employee } = await admin
+    .from('employees')
+    .select('role, department_id')
+    .eq('id', userId)
+    .maybeSingle()
+  return (
+    employee?.role === 'admin' ||
+    employee?.role === 'dgm' ||
+    employee?.role === 'registrar' ||
+    (employee?.role === 'manager' && employee?.department_id === 'contract')
+  )
 }
 
 // ─────────────────────────────────────────
@@ -26,29 +41,53 @@ export async function GET(request: Request) {
       const supabase = await createClient()
       const { data: { user } } = await supabase.auth.getUser()
 
-      if (user?.id) {
-        const { data: assignments } = await admin
-          .from('employee_project_assignments')
-          .select('project_code')
-          .eq('employee_id', user.id)
+      if (!user?.id) {
+        return NextResponse.json({ projects: [] })
+      }
 
-        if (assignments && assignments.length > 0) {
-          const codes = assignments.map((a: { project_code: string }) => a.project_code)
-          const { data: projects, error } = await admin
-            .from('projects')
-            .select('*')
-            .in('code', codes)
-            .eq('active', true)
-            .order('created_at', { ascending: true })
+      const { data: assignments } = await admin
+        .from('employee_project_assignments')
+        .select('project_code')
+        .eq('employee_id', user.id)
 
-          if (error) {
-            console.log('[projects] mine GET error:', error.message)
-            return NextResponse.json({ error: 'Failed to load projects.' }, { status: 500 })
+      let assignedCodes: string[] = (assignments ?? []).map((a: { project_code: string }) => a.project_code)
+
+      if (assignedCodes.length === 0 && user.email) {
+        const { data: empProfile } = await admin
+          .from('employees')
+          .select('id')
+          .eq('email', user.email.toLowerCase())
+          .maybeSingle()
+
+        if (empProfile?.id && empProfile.id !== user.id) {
+          const { data: altAssignments } = await admin
+            .from('employee_project_assignments')
+            .select('project_code')
+            .eq('employee_id', empProfile.id)
+
+          if (altAssignments && altAssignments.length > 0) {
+            assignedCodes = altAssignments.map((a: { project_code: string }) => a.project_code)
           }
-          return NextResponse.json({ projects: projects ?? [] })
         }
       }
-      // No assignments found — fall through to return all active projects
+
+      if (assignedCodes.length === 0) {
+        return NextResponse.json({ projects: [] })
+      }
+
+      const { data: projects, error } = await admin
+        .from('projects')
+        .select('*')
+        .in('code', assignedCodes)
+        .eq('active', true)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        console.log('[projects] mine GET error:', error.message)
+        return NextResponse.json({ error: 'Failed to load projects.' }, { status: 500 })
+      }
+
+      return NextResponse.json({ projects: projects ?? [] })
     }
 
     let query = admin.from('projects').select('*').order('created_at', { ascending: true })
@@ -81,8 +120,9 @@ export async function POST(request: Request) {
     if (!user?.email) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     }
-    if (!isDGM(user.email)) {
-      return NextResponse.json({ error: 'Admin access required.' }, { status: 403 })
+    const hasAccess = await checkProjectsWriteAccess(user.id, user.email)
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Admin or Contract Manager access required.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -116,7 +156,7 @@ export async function POST(request: Request) {
 }
 
 // ─────────────────────────────────────────
-// PATCH /api/projects  — update a project (admin only)
+// PATCH /api/projects  — update a project (admin, contract manager, or assigned employee)
 // ─────────────────────────────────────────
 export async function PATCH(request: Request) {
   try {
@@ -125,9 +165,6 @@ export async function PATCH(request: Request) {
 
     if (!user?.email) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
-    }
-    if (!isDGM(user.email)) {
-      return NextResponse.json({ error: 'Admin access required.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -138,9 +175,61 @@ export async function PATCH(request: Request) {
     }
 
     const admin = createAdminClient()
+
+    // Fetch current project to check code assignment
+    const { data: project } = await admin
+      .from('projects')
+      .select('code')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found.' }, { status: 404 })
+    }
+
+    const hasAccess = await checkProjectsWriteAccess(user.id, user.email)
+    let isAssignedEmployee = false
+
+    if (!hasAccess) {
+      const { data: empProfile } = await admin
+        .from('employees')
+        .select('role, department_id')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (empProfile && empProfile.department_id === 'contract') {
+        const { data: assignment } = await admin
+          .from('employee_project_assignments')
+          .select('project_code')
+          .eq('employee_id', user.id)
+          .eq('project_code', project.code)
+          .maybeSingle()
+
+        if (assignment) {
+          isAssignedEmployee = true
+        }
+      }
+    }
+
+    if (!hasAccess && !isAssignedEmployee) {
+      return NextResponse.json({ error: 'Permission denied. Admin, Contract Manager, or assigned employee role required.' }, { status: 403 })
+    }
+
+    // Limit fields employee can update
+    const updatesToApply = { ...updates }
+    if (isAssignedEmployee) {
+      delete updatesToApply.code
+      delete updatesToApply.name
+      delete updatesToApply.client
+      delete updatesToApply.contractor
+      delete updatesToApply.start_date
+      delete updatesToApply.estimated_completion
+      delete updatesToApply.priority
+    }
+
     const { data, error } = await admin
       .from('projects')
-      .update(updates)
+      .update(updatesToApply)
       .eq('id', id)
       .select()
       .single()
@@ -168,8 +257,9 @@ export async function DELETE(request: Request) {
     if (!user?.email) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
     }
-    if (!isDGM(user.email)) {
-      return NextResponse.json({ error: 'Admin access required.' }, { status: 403 })
+    const hasAccess = await checkProjectsWriteAccess(user.id, user.email)
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Admin or Contract Manager access required.' }, { status: 403 })
     }
 
     const body = await request.json()

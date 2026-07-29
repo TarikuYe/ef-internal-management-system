@@ -102,7 +102,7 @@ export async function POST(request: Request) {
               email: trimmedEmail,
               department: department?.trim() || null,
               active: true,
-              role: role?.trim() || 'engineer'
+              role: role?.trim() || 'employee'
             })
 
           if (employeeError) {

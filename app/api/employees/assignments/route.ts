@@ -16,10 +16,15 @@ async function checkAdminOrDgm(userId: string, userEmail: string) {
   const admin = createAdminClient()
   const { data: employee } = await admin
     .from('employees')
-    .select('role')
+    .select('role, department_id')
     .eq('id', userId)
     .maybeSingle()
-  return employee?.role === 'admin' || employee?.role === 'dgm' || employee?.role === 'registrar'
+  return (
+    employee?.role === 'admin' ||
+    employee?.role === 'dgm' ||
+    employee?.role === 'registrar' ||
+    (employee?.role === 'manager' && employee?.department_id === 'contract')
+  )
 }
 
 // ─────────────────────────────────────────

@@ -162,7 +162,7 @@ export async function GET(_req: Request) {
   const { data: logs, error: logsError } = await admin
     .from('daily_work_logs')
     .select(
-      'id, log_date, office_entrance_time, office_leave_time, actual_working_hour, ' +
+      'id, log_date, office_entrance_time, office_leave_time, actual_working_hour, hours_worked, ' +
       'assigned_tasks, actual_work_done, completion_percentage, remark, ' +
       'daily_work_log_reviews(approval_status, head_comments, reviewed_at)',
     )
@@ -179,7 +179,7 @@ export async function GET(_req: Request) {
 
   // Flatten the most-recent review onto each log row (same logic as the
   // GET /api/daily-work-logs handler so both views are consistent).
-  const rows = (logs ?? []).map((log: any) => {
+  const allRows = (logs ?? []).map((log: any) => {
     const reviews: any[] = log.daily_work_log_reviews ?? []
     const latestReview = reviews.sort(
       (a: any, b: any) =>
@@ -193,6 +193,25 @@ export async function GET(_req: Request) {
       reviewed_at:     latestReview?.reviewed_at     ?? null,
     }
   })
+
+  // ── Deduplicate resubmission pairs ───────────────────────────────────────
+  // When an employee corrects a returned log, the DB keeps the old Returned
+  // row AND gains a new row for the same date. We must suppress the old
+  // Returned row so each date only shows the most-recent meaningful entry.
+  //
+  // Rule (mirrors employee-workspace.tsx):
+  //   For a given log_date, if ANY non-Returned row exists, hide all Returned
+  //   rows for that date — they have been superseded by the correction.
+  const datesWithNonReturned = new Set<string>(
+    allRows
+      .filter((r: any) => r.approval_status !== 'Returned')
+      .map((r: any) => r.log_date as string),
+  )
+
+  const rows = allRows.filter(
+    (r: any) =>
+      !(r.approval_status === 'Returned' && datesWithNonReturned.has(r.log_date)),
+  )
 
   // ── 4. Build workbook ─────────────────────────────────────────────────────
   const wb = new ExcelJS.Workbook()
@@ -300,11 +319,42 @@ export async function GET(_req: Request) {
 
     // ── Col D: Computed Shift Hours ──────────────────────────────────────────
     const hoursCell = row.getCell(4)
-    const hoursVal  = log.actual_working_hour != null
-      ? parseFloat(String(log.actual_working_hour))
-      : null
-    hoursCell.value = hoursVal !== null ? hoursVal : '—'
-    hoursCell.numFmt = hoursVal !== null ? '0.00' : '@'
+    let hoursVal: number | null = null
+
+    // Priority: 1) manager actual_working_hour, 2) manager hours_worked,
+    // 3) punch-time duration (minus 1h lunch for >5h shifts), 4) shift default
+    const actualH = log.actual_working_hour != null && !isNaN(Number(log.actual_working_hour))
+      ? Number(log.actual_working_hour) : NaN
+    const workedH = log.hours_worked != null && !isNaN(Number(log.hours_worked))
+      ? Number(log.hours_worked) : NaN
+
+    if (!isNaN(actualH) && actualH > 0) {
+      hoursVal = actualH
+    } else if (!isNaN(workedH) && workedH > 0) {
+      hoursVal = workedH
+    } else if (log.office_entrance_time && log.office_leave_time) {
+      try {
+        const inParts  = String(log.office_entrance_time).split(':').map(Number)
+        const outParts = String(log.office_leave_time).split(':').map(Number)
+        if (inParts.length >= 2 && outParts.length >= 2 && !isNaN(inParts[0]) && !isNaN(outParts[0])) {
+          const inMins  = inParts[0]  * 60 + (inParts[1]  || 0)
+          const outMins = outParts[0] * 60 + (outParts[1] || 0)
+          let diffMin   = outMins - inMins
+          if (diffMin > 0) {
+            if (diffMin > 300) diffMin -= 60 // 1 hour lunch break deduction
+            hoursVal = Math.round((diffMin / 60) * 100) / 100
+          }
+        }
+      } catch {}
+    }
+
+    if (hoursVal === null) {
+      const isSaturday = log.log_date ? new Date(log.log_date).getDay() === 6 : false
+      hoursVal = isSaturday ? 4.0 : 8.0
+    }
+
+    hoursCell.value = hoursVal
+    hoursCell.numFmt = '0.00'
     hoursCell.font  = { name: 'Calibri', size: 10, color: { argb: C.BLACK_FG } }
     hoursCell.fill  = solidFill(band)
     hoursCell.alignment = { vertical: 'middle', horizontal: 'center' }
@@ -435,7 +485,7 @@ export async function GET(_req: Request) {
   measureColumnWidths(ws, DATA_START_ROW, lastDataRow)
 
   // ── 5. Stream buffer as downloadable .xlsx attachment ─────────────────────
-  const buffer     = await wb.xlsx.writeBuffer() as Buffer
+  const buffer     = Buffer.from(await wb.xlsx.writeBuffer())
   const fileDate   = todayFileStamp()
   const safeSlug   = employee.full_name.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30)
   const filename   = `My_Work_Log_Report_${safeSlug}_${fileDate}.xlsx`

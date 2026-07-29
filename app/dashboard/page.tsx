@@ -22,6 +22,9 @@ async function getOrCreateEmployee(userId: string, email: string, fullName: stri
 
   const dgmEmail = process.env.DGM_EMAIL?.toLowerCase() ?? 'dgm@efae.com'
   const isDGM = email.toLowerCase() === dgmEmail
+
+  // Executive roles (dgm, gm, admin) are cross-department — no department_id
+  const isExecutive = isDGM
   
   const { data: newEmp, error: createError } = await admin
     .from('employees')
@@ -29,8 +32,8 @@ async function getOrCreateEmployee(userId: string, email: string, fullName: stri
       id: userId,
       full_name: fullName || email.split('@')[0],
       email: email,
-      role: isDGM ? 'dgm' : 'engineer',
-      department: 'Procurement and Contract Administration'
+      role: isDGM ? 'dgm' : 'employee',
+      department_id: isExecutive ? null : 'contract',
     })
     .select()
     .single()
@@ -57,11 +60,18 @@ export default async function DashboardPage() {
     user.user_metadata?.full_name ?? ''
   )
 
-  // Redirect based on role
-  if (employee.role === 'dgm') {
-    redirect('/dashboard/admin/analytics')
+  // Redirect based on role and department
+  if (employee.role === 'dgm' || employee.role === 'gm') {
+    redirect('/dashboard/dgm/analytics')
   } else if (employee.role === 'admin') {
+    redirect('/dashboard/admin')
+  } else if (employee.role === 'registrar') {
     redirect('/dashboard/registrar')
+  } else if (employee.role === 'manager') {
+    redirect(`/dashboard/manager/${employee.department_id || 'contract'}`)
+  } else {
+    // Handles 'employee' and any other roles
+    redirect(`/dashboard/employee/${employee.department_id || 'contract'}`)
   }
 
   return (
@@ -69,8 +79,8 @@ export default async function DashboardPage() {
       <SiteHeader />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
         <EmployeeWorkspace
-          userId={user.id}
-          userEmail={user.email}
+          userId={user!.id}
+          userEmail={user!.email!}
           userName={employee.full_name}
           userDepartment={employee.department}
           userRole={employee.role}
@@ -79,7 +89,7 @@ export default async function DashboardPage() {
       <footer className="border-t border-border bg-secondary/40">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:px-6">
           <p>© {new Date().getFullYear()} EF Architect &amp; Engineering. All rights reserved.</p>
-          <p>EF Management Portal — Direct Entry Mode</p>
+          <p>EF Management Portal   Direct Entry Mode</p>
         </div>
       </footer>
     </div>

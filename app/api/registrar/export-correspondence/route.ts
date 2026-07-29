@@ -10,8 +10,13 @@ export const dynamic = 'force-dynamic'
 async function checkAdminOrDgm(userId: string): Promise<boolean> {
   const admin = createAdminClient()
   const { data: emp } = await admin
-    .from('employees').select('role').eq('id', userId).maybeSingle()
-  return emp?.role === 'admin' || emp?.role === 'dgm'
+    .from('employees').select('role, department_id').eq('id', userId).maybeSingle()
+  return (
+    emp?.role === 'admin' ||
+    emp?.role === 'dgm' ||
+    emp?.role === 'registrar' ||
+    emp?.department_id === 'contract'
+  )
 }
 
 // ── Colour palette (AARRGGBB) ─────────────────────────────
@@ -271,21 +276,20 @@ export async function GET(_req: Request) {
     // SHEET 1 — Letter Tracking (blank template register)
     // ════════════════════════════════════════════════════════
     const wsTrack = wb.addWorksheet('Letter Tracking')
-    wsTrack.views = [{ showGridLines: true, zoomScale: 100 }]
 
-    const TRACK_HEADERS = ['S.No','Letter Ref No.','Date','Direction','From (Sender)','To (Recipient)','Subject','Mode','Priority','Assigned To','Action Required','Due Date','Status','Date Closed','Remarks']
+    const TRACK_HEADERS = ['S/No.','Letter Ref No.','Date','Direction','Counterparty','Subject','Category','Resp. Required?','Response Due Date','Linked Ref','Response Sent Date','Status','Aging (Days)','Remarks']
     // Title banner
-    wsTrack.mergeCells(`A1:O1`)
+    wsTrack.mergeCells('A1:N1')
     const trTitle = wsTrack.getCell('A1')
-    trTitle.value = 'LETTER TRACKING REGISTER'
+    trTitle.value = 'LETTER TRACKING REGISTER — EF Architects & Engineers Consulting PLC'
     trTitle.font  = { name: 'Calibri', size: 13, bold: true, color: { argb: C.NAVY_FG } }
     trTitle.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.NAVY_BG } }
     trTitle.alignment = { vertical: 'middle', horizontal: 'center' }
     wsTrack.getRow(1).height = 28
 
-    wsTrack.mergeCells('A2:O2')
+    wsTrack.mergeCells('A2:N2')
     const trSub = wsTrack.getCell('A2')
-    trSub.value = 'Correspondence Log — Inward & Outward'
+    trSub.value = `Generated: ${lastUpdated}  |  Total Records: ${all.length}  |  Outgoing: ${outgoing.length}  |  Incoming: ${incoming.length}`
     trSub.font  = { name: 'Calibri', size: 9, italic: true, color: { argb: C.GRAY_FG } }
     trSub.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.SLATE_BG } }
     trSub.alignment = { vertical: 'middle', horizontal: 'center' }
@@ -293,21 +297,43 @@ export async function GET(_req: Request) {
 
     buildHeaderRow(wsTrack, 3, TRACK_HEADERS)
 
-    // 30 blank numbered rows
-    for (let i = 1; i <= 30; i++) {
-      const row = wsTrack.getRow(3 + i)
+    // Populate with ALL actual records (outgoing first, then incoming)
+    const allSorted = [
+      ...all.filter(r => r.direction === 'Outgoing'),
+      ...all.filter(r => r.direction === 'Incoming'),
+    ]
+    allSorted.forEach((r, i) => {
+      const row = wsTrack.getRow(4 + i)
       row.height = 17
-      row.getCell(1).value = i
-      row.getCell(1).font  = { name: 'Calibri', size: 9 }
-      row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' }
-      for (let c = 1; c <= 15; c++) allBorders(row.getCell(c))
-    }
+      const vals = [
+        i + 1, r.ref, r.dateLogged, r.direction, r.counterparty, r.subject,
+        r.category, r.respRequired ? 'Yes' : 'No',
+        r.dueDate, r.linkedRef, r.sentDate, r.status, r.aging, r.remarks
+      ]
+      vals.forEach((v, ci) => {
+        const cell = row.getCell(ci + 1)
+        cell.value = v
+        cell.font  = { name: 'Calibri', size: 9 }
+        cell.alignment = { vertical: 'middle', horizontal: ci === 4 || ci === 5 ? 'left' : 'center' }
+        allBorders(cell)
+      })
+      // Direction badge colouring
+      const dirCell = row.getCell(4)
+      if (r.direction === 'Incoming') {
+        dirCell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: C.INCOMING_FG } }
+        dirCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.KPI_BLUE_BG } }
+      } else {
+        dirCell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: C.OUTGOING_FG } }
+        dirCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.AMBER_BG } }
+      }
+      applyStatusCell(row.getCell(12), r.status)
+    })
 
-    //           S/N  Ref   Date  Dir  From  To    Subject  Mode  Pri  Assigned  Action  Due  Status  Closed  Remarks
-    const trackWidths = [5, 15, 11, 10, 18, 18, 28, 10, 9, 15, 18, 11, 11, 11, 18]
+    //   S/N  Ref   Date  Dir   Counterparty  Subject  Cat  Reqd  Due   Linked  Sent  Status  Aging  Remarks
+    const trackWidths = [5, 15, 11, 10, 20, 28, 11, 8, 11, 14, 11, 11, 8, 18]
     trackWidths.forEach((w, i) => { wsTrack.getColumn(i + 1).width = w })
-    // Freeze header rows
-    wsTrack.views = [{ state: 'frozen', xSplit: 0, ySplit: 3, showGridLines: true, zoomScale: 100 }]
+    // Freeze header rows — this is the default active sheet
+    wsTrack.views = [{ state: 'frozen', xSplit: 0, ySplit: 3, showGridLines: true, zoomScale: 100, activeCell: 'A4' }]
 
     // ════════════════════════════════════════════════════════
     // SHEET 2 — Dashboard

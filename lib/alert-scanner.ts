@@ -189,7 +189,7 @@ async function scanBonds(): Promise<{ sent: number; errors: number; log: string[
     return results
   }
 
-  for (const bond of (bonds ?? []) as BondRow[]) {
+  for (const bond of (bonds ?? []) as unknown as BondRow[]) {
     try {
       const daysRemaining = daysUntil(bond.expiry_date)
 
@@ -294,7 +294,7 @@ async function scanEots(): Promise<{ sent: number; errors: number; log: string[]
     return results
   }
 
-  for (const eot of (eots ?? []) as EotRow[]) {
+  for (const eot of (eots ?? []) as unknown as EotRow[]) {
     try {
       const daysRemaining = daysUntil(eot.revised_completion_date)
 

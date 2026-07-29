@@ -56,6 +56,6 @@ export async function GET(
   }
 
   // Strip internal-only field before returning
-  const { token_expires_at, ...safe } = data
+  const { token_expires_at, ...safe } = data as any
   return NextResponse.json({ bond: safe })
 }

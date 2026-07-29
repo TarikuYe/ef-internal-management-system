@@ -1,35 +1,55 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Compass, Menu, X, ChevronRight, LayoutDashboard, BarChart3, Inbox, Users, Home, FolderKanban } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import { Compass, Menu, X, ChevronRight, LayoutDashboard, BarChart3, Inbox, Users, Home, FolderKanban, UserCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { SignOutButton } from '@/components/sign-out-button'
-import { useEffect, useState } from 'react'
+import { isSigningOut } from '@/lib/sign-out-state'
+import React, { useEffect, useState, useMemo } from 'react'
 
 const ROUTING_DICTIONARY: Record<string, { label: string; href: string; icon: any }[]> = {
+  // 'employee' is the actual DB value for regular staff
+  employee: [
+    { label: 'My Workspace', href: '/dashboard/employee/[department_id]', icon: Home },
+  ],
+  // Legacy fallback key (kept for safety)
   engineer: [
-    // { label: 'AI Assistant', href: '/dashboard/ai-assistant', icon: Sparkles }, // hidden until API subscription is ready
+    { label: 'My Workspace', href: '/dashboard/employee/[department_id]', icon: Home },
+  ],
+  manager: [
+    { label: 'Manager Workspace', href: '/dashboard/manager/[department_id]', icon: LayoutDashboard },
   ],
   admin: [
+    { label: 'Admin Panel', href: '/dashboard/admin', icon: Users },
+  ],
+  registrar: [
     { label: 'Management Center', href: '/dashboard/registrar', icon: Users },
     { label: 'Submissions Hub', href: '/api/submissions', icon: Inbox },
-    // { label: 'AI Assistant', href: '/dashboard/ai-assistant', icon: Sparkles }, // hidden until API subscription is ready
   ],
   dgm: [
-    { label: 'Control Tower', href: '/dashboard/admin/analytics', icon: BarChart3 },
-    { label: 'Projects', href: '/dashboard/admin/projects', icon: FolderKanban },
+    { label: 'Control Tower', href: '/dashboard/dgm/analytics', icon: BarChart3 },
+    { label: 'Projects', href: '/dashboard/dgm/projects', icon: FolderKanban },
     { label: 'View Registers', href: '/dashboard/registrar', icon: LayoutDashboard },
-    // { label: 'AI Assistant', href: '/dashboard/ai-assistant', icon: Sparkles }, // hidden until API subscription is ready
+  ],
+  // 'gm' (General Manager) shares the same navigation as DGM
+  gm: [
+    { label: 'Control Tower', href: '/dashboard/dgm/analytics', icon: BarChart3 },
+    { label: 'Projects', href: '/dashboard/dgm/projects', icon: FolderKanban },
+    { label: 'View Registers', href: '/dashboard/registrar', icon: LayoutDashboard },
   ],
 }
 
 export function SiteHeader() {
   const [user, setUser] = useState<any>(null)
-  const [role, setRole] = useState<string>('engineer')
+  const [authLoading, setAuthLoading] = useState(true)
+  const [role, setRole] = useState<string>('employee')
+  const [departmentId, setDepartmentId] = useState<string>('contract')
   const [displayName, setDisplayName] = useState<string>('')
+  const [avatarUrl, setAvatarUrl] = useState<string>('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
+  const router = useRouter()
 
   useEffect(() => {
     const supabase = createClient()
@@ -40,13 +60,17 @@ export function SiteHeader() {
         setUser(user)
         const { data: employee } = await supabase
           .from('employees')
-          .select('role, full_name')
+          .select('role, full_name, department_id, avatar_url')
           .eq('id', user.id)
           .maybeSingle()
         
         if (employee) {
           setRole(employee.role)
+          if (employee.department_id) {
+            setDepartmentId(employee.department_id)
+          }
           setDisplayName(employee.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || '')
+          setAvatarUrl(employee.avatar_url || '')
         } else {
           if (user.email?.toLowerCase() === 'dgm@efae.com') {
             setRole('dgm')
@@ -54,6 +78,7 @@ export function SiteHeader() {
           setDisplayName(user.user_metadata?.full_name || user.email?.split('@')[0] || '')
         }
       }
+      setAuthLoading(false)
     }
 
     getSession()
@@ -63,21 +88,32 @@ export function SiteHeader() {
         setUser(session.user)
         supabase
           .from('employees')
-          .select('role, full_name')
+          .select('role, full_name, department_id, avatar_url')
           .eq('id', session.user.id)
           .maybeSingle()
           .then(({ data: employee }) => {
             if (employee) {
               setRole(employee.role)
+              if (employee.department_id) {
+                setDepartmentId(employee.department_id)
+              }
               setDisplayName(employee.full_name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || '')
+              setAvatarUrl(employee.avatar_url || '')
             } else {
               setDisplayName(session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || '')
             }
+            setAuthLoading(false)
           })
       } else {
-        setUser(null)
-        setRole('engineer')
-        setDisplayName('')
+        // Don't flip to the unauthenticated UI while a sign-out navigation
+        // is already in progress — it causes the "Get started" button to flash.
+        if (!isSigningOut) {
+          setUser(null)
+          setRole('employee')
+          setDepartmentId('contract')
+          setDisplayName('')
+          setAuthLoading(false)
+        }
       }
     })
 
@@ -86,14 +122,28 @@ export function SiteHeader() {
     }
   }, [])
 
-  const navLinks = ROUTING_DICTIONARY[role] || ROUTING_DICTIONARY.engineer
+  const navLinks = React.useMemo(() => {
+    const baseLinks = ROUTING_DICTIONARY[role] || ROUTING_DICTIONARY.employee
+    return baseLinks.map(link => {
+      let href = link.href
+      if (href.includes('[department_id]')) {
+        href = href.replace('[department_id]', departmentId || 'contract')
+      }
+      return { ...link, href }
+    })
+  }, [role, departmentId])
 
   const getRoleBadgeClass = (r: string) => {
     switch (r) {
       case 'dgm':
+      case 'gm':
         return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
       case 'admin':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+      case 'manager':
+        return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+      case 'registrar':
+        return 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300'
       default:
         return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
     }
@@ -101,9 +151,11 @@ export function SiteHeader() {
 
   const getRoleGradient = (r: string) => {
     switch (r) {
-      case 'dgm':    return 'from-emerald-500 to-teal-600'
-      case 'admin':  return 'from-purple-500 to-indigo-600'
-      default:       return 'from-blue-500 to-indigo-600'
+      case 'dgm':
+      case 'gm':    return 'from-emerald-500 to-teal-600'
+      case 'admin': return 'from-purple-500 to-indigo-600'
+      case 'manager': return 'from-amber-500 to-orange-600'
+      default:      return 'from-blue-500 to-indigo-600'
     }
   }
 
@@ -135,12 +187,18 @@ export function SiteHeader() {
             <span className="text-foreground">EF</span>{' '}
             <span className="text-accent">A&E</span>
             <span className="block text-[11px] font-medium tracking-wide text-muted-foreground">
-              Report Portal
+              Internal Management Portal
             </span>
           </span>
         </Link>
 
-        {user ? (
+        {authLoading ? (
+          // Placeholder that matches the approximate width of the nav area
+          // so the header doesn't shift while auth resolves.
+          <div className="hidden md:flex items-center gap-4 h-full min-w-0">
+            <div className="h-5 w-40 rounded-md bg-muted/50 animate-pulse" />
+          </div>
+        ) : user ? (
           <div className="hidden md:flex items-center gap-4 h-full min-w-0">
             <nav className="flex items-center gap-0.5 text-sm font-medium h-full min-w-0 overflow-x-auto">
               {navLinks.map((link) => {
@@ -171,6 +229,35 @@ export function SiteHeader() {
                   {role}
                 </span>
               </div>
+              {role === 'admin' || role === 'dgm' || role === 'gm' ? (
+                <button
+                  onClick={() => router.push('/dashboard/admin?tab=profile')}
+                  className="flex size-8 items-center justify-center rounded-lg border border-border overflow-hidden text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                  aria-label="My profile"
+                  title="My Profile"
+                >
+                  {avatarUrl
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={avatarUrl} alt="Avatar" className="size-full object-cover" />
+                    : <UserCircle className="size-4" />}
+                </button>
+              ) : role === 'employee' || role === 'manager' ? (
+                <button
+                  onClick={() => router.push(
+                    role === 'manager'
+                      ? `/dashboard/manager/${departmentId}?tab=profile`
+                      : `/dashboard/employee/${departmentId}?tab=profile`
+                  )}
+                  className="flex size-8 items-center justify-center rounded-lg border border-border overflow-hidden text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                  aria-label="My profile"
+                  title="My Profile"
+                >
+                  {avatarUrl
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={avatarUrl} alt="Avatar" className="size-full object-cover" />
+                    : <UserCircle className="size-4" />}
+                </button>
+              ) : null}
               <SignOutButton />
             </div>
           </div>
@@ -191,7 +278,7 @@ export function SiteHeader() {
           </nav>
         )}
 
-        {user && (
+        {!authLoading && user && (
           <button
             onClick={() => setMobileMenuOpen(true)}
             className="flex md:hidden items-center justify-center size-9 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-colors"
@@ -202,7 +289,7 @@ export function SiteHeader() {
         )}
       </div>
 
-      {user && mobileMenuOpen && (
+      {!authLoading && user && mobileMenuOpen && (
         <>
           {/* Backdrop */}
           <div
@@ -237,8 +324,11 @@ export function SiteHeader() {
               </div>
 
               <div className="relative flex items-center gap-3">
-                <div className={`flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br ${getRoleGradient(role)} shadow-lg text-white font-bold text-base shrink-0 ring-2 ring-white/20`}>
-                  {getInitials(displayName)}
+                <div className={`flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br ${getRoleGradient(role)} shadow-lg text-white font-bold text-base shrink-0 ring-2 ring-white/20 overflow-hidden`}>
+                  {avatarUrl
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={avatarUrl} alt="Avatar" className="size-full object-cover" />
+                    : getInitials(displayName)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm text-white truncate leading-tight">
@@ -323,6 +413,40 @@ export function SiteHeader() {
             </div>
 
             <div className="shrink-0 px-4 pb-6 pt-3 border-t border-border bg-secondary/20">
+              {(role === 'admin' || role === 'dgm' || role === 'gm') && (
+                <Link
+                  href="/dashboard/admin?tab=profile"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-secondary transition-all group mb-2"
+                >
+                  <span className="flex size-8 items-center justify-center rounded-lg bg-secondary group-hover:bg-background transition-colors overflow-hidden">
+                    {avatarUrl
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={avatarUrl} alt="Avatar" className="size-full object-cover" />
+                      : <UserCircle className="size-4" />}
+                  </span>
+                  <span className="flex-1">My Profile</span>
+                  <ChevronRight className="size-3.5 opacity-40 group-hover:opacity-70 transition-opacity" />
+                </Link>
+              )}
+              {(role === 'employee' || role === 'manager') && (
+                <Link
+                  href={role === 'manager'
+                    ? `/dashboard/manager/${departmentId}?tab=profile`
+                    : `/dashboard/employee/${departmentId}?tab=profile`}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-secondary transition-all group mb-2"
+                >
+                  <span className="flex size-8 items-center justify-center rounded-lg bg-secondary group-hover:bg-background transition-colors overflow-hidden">
+                    {avatarUrl
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={avatarUrl} alt="Avatar" className="size-full object-cover" />
+                      : <UserCircle className="size-4" />}
+                  </span>
+                  <span className="flex-1">My Profile</span>
+                  <ChevronRight className="size-3.5 opacity-40 group-hover:opacity-70 transition-opacity" />
+                </Link>
+              )}
               <SignOutButton className="w-full justify-center rounded-xl h-10 font-semibold text-sm bg-destructive/10 text-destructive hover:bg-destructive hover:text-white border border-destructive/20 transition-all duration-200" />
             </div>
           </div>

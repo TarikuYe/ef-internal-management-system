@@ -10,8 +10,13 @@ export const dynamic = 'force-dynamic'
 async function checkAdminOrDgm(userId: string): Promise<boolean> {
   const admin = createAdminClient()
   const { data: emp } = await admin
-    .from('employees').select('role').eq('id', userId).maybeSingle()
-  return emp?.role === 'admin' || emp?.role === 'dgm'
+    .from('employees').select('role, department_id').eq('id', userId).maybeSingle()
+  return (
+    emp?.role === 'admin' ||
+    emp?.role === 'dgm' ||
+    emp?.role === 'registrar' ||
+    emp?.department_id === 'contract'
+  )
 }
 
 // ── Colour palette (AARRGGBB) — matches Bond-Expiry-Tracker template ──

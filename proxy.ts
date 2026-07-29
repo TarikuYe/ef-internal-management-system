@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
-const DGM_EMAIL = process.env.DGM_EMAIL
-
 // Routes that do NOT require authentication
 const publicPaths = [
   '/auth/signin',
@@ -17,12 +15,7 @@ const publicPaths = [
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Allow public routes through without session refresh
-  if (publicPaths.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next()
-  }
-
-  // Allow static files and Next.js internals
+  // Allow static files and Next.js internals through without touching the session
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/static') ||
@@ -32,7 +25,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Always run updateSession so the token pair is refreshed on every request.
+  // Skipping this on public paths was the cause of "Invalid Refresh Token" errors.
   const { supabaseResponse, user } = await updateSession(request)
+
+  // Public paths: allow through after session refresh (so cookies are updated)
+  if (publicPaths.some((p) => pathname.startsWith(p))) {
+    return supabaseResponse
+  }
 
   // Check auth for protected routes
   const isProtectedRoute =
@@ -45,19 +45,16 @@ export async function proxy(request: NextRequest) {
       // Redirect to sign-in with return URL
       const signInUrl = new URL('/auth/signin', request.url)
       signInUrl.searchParams.set('redirect', pathname)
-      return NextResponse.redirect(signInUrl)
+      const redirectResponse = NextResponse.redirect(signInUrl)
+      // Carry over any refreshed session cookies
+      supabaseResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookie)
+      })
+      return redirectResponse
     }
-
-    // Admin route check: /dashboard/admin
-    if (pathname.startsWith('/dashboard/admin')) {
-      const userEmail = user.email?.toLowerCase()
-      const dgmEmail = DGM_EMAIL?.toLowerCase()
-
-      if (!userEmail || !dgmEmail || userEmail !== dgmEmail) {
-        // Non-DGM employee → redirect to unauthorized page
-        return NextResponse.redirect(new URL('/auth/unauthorized', request.url))
-      }
-    }
+    // Role-based access (DGM, admin, etc.) is enforced at the page/API level,
+    // which can query the database. The middleware only ensures the user is
+    // authenticated before reaching any protected route.
   }
 
   return supabaseResponse

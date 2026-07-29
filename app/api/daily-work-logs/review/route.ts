@@ -33,16 +33,16 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient()
 
-    // Verify reviewer is admin or dgm
+    // Verify reviewer is admin, dgm, or manager
     const { data: reviewer } = await admin
       .from('employees')
-      .select('id, role')
+      .select('id, role, department_id')
       .eq('id', user.id)
       .maybeSingle()
 
-    if (!reviewer || (reviewer.role !== 'admin' && reviewer.role !== 'dgm')) {
+    if (!reviewer || (reviewer.role !== 'admin' && reviewer.role !== 'dgm' && reviewer.role !== 'manager')) {
       return NextResponse.json(
-        { error: 'Permission denied. Only admin or DGM can record approval decisions.' },
+        { error: 'Permission denied. Only admin, DGM, or managers can record approval decisions.' },
         { status: 403 },
       )
     }
@@ -52,6 +52,10 @@ export async function POST(request: Request) {
       log_id: number
       approval_status: 'Approved' | 'Returned' | 'Pending'
       head_comments?: string
+      hours_worked?: number
+      actual_working_hour?: number
+      office_entrance_time?: string
+      office_leave_time?: string
     }> = body.reviews
 
     if (!Array.isArray(reviews) || reviews.length === 0) {
@@ -75,10 +79,10 @@ export async function POST(request: Request) {
         )
       }
 
-      // Verify the referenced log exists (read-only check, no mutation)
+      // Verify the referenced log exists and load the employee's department
       const { data: logRow } = await admin
         .from('daily_work_logs')
-        .select('id')
+        .select('id, employee_id, employees(department_id)')
         .eq('id', rev.log_id)
         .maybeSingle()
 
@@ -87,6 +91,36 @@ export async function POST(request: Request) {
           { error: `Log row with id=${rev.log_id} not found.` },
           { status: 404 },
         )
+      }
+
+      // Enforce department limit for managers
+      if (reviewer.role === 'manager') {
+        const employeeDeptId = (logRow.employees as any)?.department_id
+        if (employeeDeptId !== reviewer.department_id) {
+          return NextResponse.json(
+            { error: `Permission denied. Managers can only approve timesheets within their own department.` },
+            { status: 403 },
+          )
+        }
+      }
+
+      // If manager updated working hours or entrance/leave times, patch the daily_work_logs table record
+      if (
+        typeof rev.hours_worked === 'number' ||
+        typeof rev.actual_working_hour === 'number' ||
+        rev.office_entrance_time ||
+        rev.office_leave_time
+      ) {
+        const logUpdates: Record<string, any> = {}
+        if (typeof rev.hours_worked === 'number') logUpdates.hours_worked = rev.hours_worked
+        if (typeof rev.actual_working_hour === 'number') logUpdates.actual_working_hour = rev.actual_working_hour
+        if (rev.office_entrance_time) logUpdates.office_entrance_time = rev.office_entrance_time
+        if (rev.office_leave_time) logUpdates.office_leave_time = rev.office_leave_time
+        
+        await admin
+          .from('daily_work_logs')
+          .update(logUpdates)
+          .eq('id', rev.log_id)
       }
 
       reviewRecords.push({

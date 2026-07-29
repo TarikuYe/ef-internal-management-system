@@ -47,6 +47,6 @@ export async function GET(
     )
   }
 
-  const { token_expires_at, ...safe } = data
+  const { token_expires_at, ...safe } = data as any
   return NextResponse.json({ eot: safe })
 }

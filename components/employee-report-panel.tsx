@@ -17,7 +17,23 @@ import { Button } from '@/components/ui/button'
  *   triggers a browser download via a temporary <a> element.
  * - Manages loading state and Sonner toast notifications throughout.
  */
-export function EmployeeReportPanel() {
+interface EmployeeReportPanelProps {
+  variant?: 'outline' | 'default' | 'secondary' | 'ghost' | 'link'
+  size?: 'default' | 'sm' | 'lg' | 'icon'
+  className?: string
+  label?: string
+  mobileLabel?: string
+  showIcon?: boolean
+}
+
+export function EmployeeReportPanel({
+  variant = 'outline',
+  size = 'default',
+  className = '',
+  label = 'Download My Performance Report',
+  mobileLabel,
+  showIcon = true,
+}: EmployeeReportPanelProps = {}) {
   const [downloading, setDownloading] = useState(false)
 
   async function handleDownload() {
@@ -83,25 +99,31 @@ export function EmployeeReportPanel() {
     }
   }
 
+  const mobText = mobileLabel ?? label.replace(/^Download /, '').replace(/ Performance Report$/, ' Log')
+
   return (
     <Button
-      variant="outline"
+      variant={variant}
+      size={size}
       onClick={handleDownload}
       disabled={downloading}
-      className="h-9 gap-1.5"
+      className={`gap-1.5 ${className || (size === 'default' ? 'h-9' : '')}`}
       title="Download your personal attendance and work log report as an Excel spreadsheet"
     >
       {downloading ? (
         <>
           <Loader2 className="size-4 animate-spin" />
-          <span>Building Report…</span>
+          <span className="hidden sm:inline">Building Report…</span>
+          <span className="sm:hidden">Building…</span>
         </>
       ) : (
         <>
-          <FileSpreadsheet className="size-4" />
-          <span>Download My Performance Report</span>
+          {showIcon && <FileSpreadsheet className="size-4" />}
+          <span className="hidden sm:inline">{label}</span>
+          <span className="sm:hidden">{mobText}</span>
         </>
       )}
     </Button>
   )
 }
+
