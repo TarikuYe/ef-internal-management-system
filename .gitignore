@@ -21,3 +21,8 @@ node_modules
 
 # Sensitive setup/documentation files (may contain credentials)
 SMTP_SETUP.md
+GMAIL_SMTP_SETUP.md
+SUPABASE_DATABASE_SETUP.md
+CRON_SETUP_GUIDE.md
+AUTOMATED_EMAIL_ALERTS.md
+Description.md
