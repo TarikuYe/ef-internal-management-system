@@ -18,3 +18,6 @@ node_modules
 
 # SQL migration files
 *.sql
+
+# Sensitive setup/documentation files (may contain credentials)
+SMTP_SETUP.md
