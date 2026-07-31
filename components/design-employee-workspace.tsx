@@ -137,6 +137,7 @@ export function DesignEmployeeWorkspace({
   )
   const { data: projectsData, mutate: mutateProjects } = useSWR<{ projects: any[] }>('/api/projects?mine=1', fetcher, { refreshInterval: 3_000 })
   const { data: evalsData } = useSWR('/api/evaluations', fetcher)
+  const { data: weeklyTasksData } = useSWR<{ tasks: any[] }>('/api/weekly-tasks', fetcher)
 
   // Real-time listeners
   useEffect(() => {
@@ -152,6 +153,7 @@ export function DesignEmployeeWorkspace({
 
   const projects = projectsData?.projects ?? []
   const evaluations = evalsData?.evaluations ?? []
+  const weeklyTasks = weeklyTasksData?.tasks ?? []
 
   const navigateWeek = (weeks: number) => {
     const newRef = new Date(referenceDate)
@@ -239,6 +241,37 @@ export function DesignEmployeeWorkspace({
       }
     } catch (_) {}
   }, [timesheetData, days])
+
+  const handleWeeklyTaskSelect = (index: number, taskCode: string) => {
+    const row = localRows[index]
+    if (isRowLocked(row)) return
+    
+    const task = weeklyTasks.find((t: any) => t.task_code === taskCode)
+    if (!task) {
+      handleInputChange(index, 'task_code', taskCode)
+      return
+    }
+
+    setLocalRows(prev => {
+      const copy = [...prev]
+      copy[index] = {
+        ...copy[index],
+        task_code: task.task_code || '',
+        discipline: task.discipline || '',
+        assigned_tasks: task.task_description || '',
+        priority: task.priority || 'Medium',
+        starting_date: task.start_date || '',
+        ending_date: task.end_date || '',
+        deadline: task.deadline || '',
+      }
+      try {
+        const draftRows = copy.filter(r => !isRowLocked(r))
+        localStorage.setItem(draftKey, JSON.stringify(draftRows))
+        setDraftSaved(true)
+      } catch (_) {}
+      return copy
+    })
+  }
 
   const handleInputChange = (index: number, field: keyof TimesheetRow, value: any) => {
     const row = localRows[index]
@@ -389,8 +422,8 @@ export function DesignEmployeeWorkspace({
   }
 
   // Dashboard stats
-  const pendingCount = localRows.filter(r => r.approval_status === 'Pending').length
-  const returnedCount = localRows.filter(r => r.approval_status === 'Returned').length
+  const pendingCount = localRows.filter(r => r.approval_status === 'Pending' && !r.isNew).length
+  const returnedCount = localRows.filter(r => r.approval_status === 'Returned' && !r.isNew).length
   const lastEval = evaluations[0] ?? null
 
   return (
@@ -618,8 +651,8 @@ export function DesignEmployeeWorkspace({
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-36">Day / Date</th>
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-28">Discipline</th>
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-24">Task Code</th>
-                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground w-48">Task Description *</th>
-                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground w-48">Actual Work Done *</th>
+                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground min-w-[280px]">Task Description *</th>
+                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground min-w-[280px]">Actual Work Done *</th>
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-24">Priority</th>
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-28">Starting Date</th>
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-28">Ending Date</th>
@@ -635,7 +668,9 @@ export function DesignEmployeeWorkspace({
                 </thead>
                 <tbody>
                   {localRows.map((row, idx) => {
+                    const isWeeklyTask = weeklyTasks.some((t: any) => t.task_code === row.task_code)
                     const locked = isRowLocked(row)
+                    const fieldLocked = locked || isWeeklyTask
                     const completionPct = Math.round(row.completion_percentage * 100)
                     const isFirstOfDate = idx === 0 || localRows[idx - 1].log_date !== row.log_date
                     const rowsForDate = localRows.filter(r => r.log_date === row.log_date)
@@ -667,7 +702,7 @@ export function DesignEmployeeWorkspace({
 
                         {/* Discipline */}
                         <td className="py-3 px-2 align-top">
-                          {locked ? (
+                          {fieldLocked ? (
                             <span className="text-xs font-semibold text-foreground">{row.discipline || '—'}</span>
                           ) : (
                             <Select value={row.discipline} onValueChange={(v) => handleInputChange(idx, 'discipline', v)}>
@@ -681,17 +716,32 @@ export function DesignEmployeeWorkspace({
 
                         {/* Task Code */}
                         <td className="py-3 px-2 align-top">
-                          <Input value={row.task_code} onChange={(e) => handleInputChange(idx, 'task_code', e.target.value)}
-                            disabled={locked} placeholder="PRJ-134"
-                            className="h-8 text-xs font-mono font-bold disabled:opacity-50 disabled:cursor-not-allowed" />
+                          {locked ? (
+                            <span className="text-xs font-semibold text-foreground">{row.task_code || '—'}</span>
+                          ) : (
+                            <div className="flex flex-col gap-1">
+                              {weeklyTasks.length > 0 && (
+                                <Select value={weeklyTasks.some((t: any) => t.task_code === row.task_code) ? row.task_code : ''} onValueChange={(v) => handleWeeklyTaskSelect(idx, v || '')}>
+                                  <SelectTrigger className="h-8 text-xs font-mono font-bold"><SelectValue placeholder="Select Plan" /></SelectTrigger>
+                                  <SelectContent>
+                                    {weeklyTasks.map((t: any) => (
+                                      <SelectItem key={t.id} value={t.task_code}>{t.task_code} - {t.task_description.substring(0, 15)}...</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              <Input value={row.task_code} onChange={(e) => handleInputChange(idx, 'task_code', e.target.value)}
+                                placeholder="Task Code..." className="h-8 text-xs font-mono font-bold" />
+                            </div>
+                          )}
                         </td>
 
                         {/* Task Description */}
                         <td className="py-3 px-2 align-top">
                           <textarea value={row.assigned_tasks} onChange={(e) => handleInputChange(idx, 'assigned_tasks', e.target.value)}
-                            disabled={locked} placeholder="Task description..." rows={3}
-                            className="w-full text-xs p-1.5 rounded-md border border-input bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed leading-relaxed" />
-                          {!locked && (
+                            disabled={fieldLocked} placeholder="Task description..." rows={3}
+                            className="w-full min-h-[80px] text-xs p-1.5 rounded-md border border-input bg-transparent resize-y focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed leading-relaxed" />
+                          {!fieldLocked && (
                             <button type="button" onClick={() => correctFieldText(idx, 'assigned_tasks')} disabled={correctingKey === `${idx}-assigned_tasks`}
                               className="flex items-center gap-1 text-[10px] text-primary mt-0.5 hover:underline">
                               {correctingKey === `${idx}-assigned_tasks` ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}Fix with AI
@@ -703,7 +753,7 @@ export function DesignEmployeeWorkspace({
                         <td className="py-3 px-2 align-top">
                           <textarea value={row.actual_work_done} onChange={(e) => handleInputChange(idx, 'actual_work_done', e.target.value)}
                             disabled={locked} placeholder="Work accomplished..." rows={3}
-                            className="w-full text-xs p-1.5 rounded-md border border-input bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed leading-relaxed" />
+                            className="w-full min-h-[80px] text-xs p-1.5 rounded-md border border-input bg-transparent resize-y focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed leading-relaxed" />
                           {!locked && (
                             <button type="button" onClick={() => correctFieldText(idx, 'actual_work_done')} disabled={correctingKey === `${idx}-actual_work_done`}
                               className="flex items-center gap-1 text-[10px] text-primary mt-0.5 hover:underline">
@@ -714,7 +764,7 @@ export function DesignEmployeeWorkspace({
 
                         {/* Priority */}
                         <td className="py-3 px-2 align-top">
-                          {locked ? (
+                          {fieldLocked ? (
                             <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
                               row.priority === 'High' ? 'bg-rose-100 text-rose-800' : row.priority === 'Low' ? 'bg-slate-100 text-slate-800' : 'bg-amber-100 text-amber-800'
                             }`}>{row.priority || 'Medium'}</span>
@@ -733,19 +783,19 @@ export function DesignEmployeeWorkspace({
                         {/* Starting Date */}
                         <td className="py-3 px-2 align-top">
                           <Input type="date" value={row.starting_date} onChange={(e) => handleInputChange(idx, 'starting_date', e.target.value)}
-                            disabled={locked} className="h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed" />
+                            disabled={fieldLocked} className="h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed" />
                         </td>
 
                         {/* Ending Date */}
                         <td className="py-3 px-2 align-top">
                           <Input type="date" value={row.ending_date} onChange={(e) => handleInputChange(idx, 'ending_date', e.target.value)}
-                            disabled={locked} className="h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed" />
+                            disabled={fieldLocked} className="h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed" />
                         </td>
 
                         {/* Deadline */}
                         <td className="py-3 px-2 align-top">
                           <Input type="date" value={row.deadline} onChange={(e) => handleInputChange(idx, 'deadline', e.target.value)}
-                            disabled={locked} className="h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed" />
+                            disabled={fieldLocked} className="h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed" />
                         </td>
 
                         {/* Working Hrs */}

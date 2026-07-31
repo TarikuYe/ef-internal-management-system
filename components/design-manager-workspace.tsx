@@ -57,7 +57,7 @@ const fetcher = async (url: string) => {
   return json
 }
 
-type Tab = 'dashboard' | 'timesheets' | 'projects' | 'evaluations' | 'exports' | 'profile' | 'analytics'
+type Tab = 'dashboard' | 'weekly-plan' | 'timesheets' | 'projects' | 'evaluations' | 'exports' | 'profile' | 'analytics'
 
 function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean): number {
   if (!entrance || !leave) return isSaturday ? 4 : 8
@@ -100,6 +100,10 @@ export function DesignManagerWorkspace({
     fetcher,
     { refreshInterval: 3_000 }
   )
+  const { data: weeklyTasksData, mutate: mutateWeeklyTasks } = useSWR<{ tasks: any[] }>(
+    `/api/weekly-tasks?department_id=${userDepartmentId}`,
+    fetcher
+  )
 
   // Real-time listener for pending daily work logs
   useEffect(() => {
@@ -131,6 +135,7 @@ export function DesignManagerWorkspace({
   const projects = projectsData?.projects ?? []
   const evaluations = evalsData?.evaluations ?? []
   const pendingLogs = pendingLogsData?.logs ?? []
+  const weeklyTasks = weeklyTasksData?.tasks ?? []
 
   const handleRefresh = async (mutateFn: () => Promise<any>, name: string) => {
     const id = toast.loading(`Refreshing ${name}...`)
@@ -275,6 +280,54 @@ export function DesignManagerWorkspace({
   const [selectedAssignEmployeeId, setSelectedAssignEmployeeId] = useState('')
   const [selectedAssignProjectCode, setSelectedAssignProjectCode] = useState('')
   const [assigning, setAssigning] = useState(false)
+
+  // Weekly Task form state
+  const [wtCode, setWtCode] = useState('')
+  const [wtDiscipline, setWtDiscipline] = useState('')
+  const [wtDesc, setWtDesc] = useState('')
+  const [wtStart, setWtStart] = useState('')
+  const [wtEnd, setWtEnd] = useState('')
+  const [wtDeadline, setWtDeadline] = useState('')
+  const [wtPriority, setWtPriority] = useState('Medium')
+  const [wtAssignedTo, setWtAssignedTo] = useState<string[]>([])
+  const [wtStatus, setWtStatus] = useState('Active')
+  const [wtRemarks, setWtRemarks] = useState('')
+  const [editingWeeklyTaskId, setEditingWeeklyTaskId] = useState<string | null>(null)
+  const [showWeeklyTaskForm, setShowWeeklyTaskForm] = useState(false)
+  const [savingWeeklyTask, setSavingWeeklyTask] = useState(false)
+
+  const handleWeeklyTaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setSavingWeeklyTask(true)
+    const method = editingWeeklyTaskId ? 'PATCH' : 'POST'
+    const payload: any = {
+      task_code: wtCode, discipline: wtDiscipline, task_description: wtDesc,
+      priority: wtPriority, start_date: wtStart || null, end_date: wtEnd || null,
+      deadline: wtDeadline || null, assigned_to: wtAssignedTo, status: wtStatus, remarks: wtRemarks
+    }
+    if (editingWeeklyTaskId) payload.id = editingWeeklyTaskId
+    try {
+      const res = await fetch('/api/weekly-tasks', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed to save weekly task.')
+      toast.success(editingWeeklyTaskId ? 'Weekly task updated' : 'Weekly task created')
+      clearWeeklyTaskForm(); mutateWeeklyTasks()
+    } catch (err: any) { toast.error(err.message || 'Failed') }
+    finally { setSavingWeeklyTask(false) }
+  }
+
+  const clearWeeklyTaskForm = () => {
+    setEditingWeeklyTaskId(null); setShowWeeklyTaskForm(!showWeeklyTaskForm)
+    setWtCode(''); setWtDiscipline(''); setWtDesc(''); setWtStart(''); setWtEnd(''); setWtDeadline('')
+    setWtPriority('Medium'); setWtAssignedTo([]); setWtStatus('Active'); setWtRemarks('')
+  }
+
+  const handleEditWeeklyTask = (t: any) => {
+    setEditingWeeklyTaskId(t.id); setShowWeeklyTaskForm(true)
+    setWtCode(t.task_code || ''); setWtDiscipline(t.discipline || ''); setWtDesc(t.task_description || '')
+    setWtStart(t.start_date || ''); setWtEnd(t.end_date || ''); setWtDeadline(t.deadline || '')
+    setWtPriority(t.priority || 'Medium'); setWtAssignedTo(t.assigned_to || [])
+    setWtStatus(t.status || 'Active'); setWtRemarks(t.remarks || '')
+  }
 
   const handleProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSavingProject(true)
@@ -484,6 +537,7 @@ export function DesignManagerWorkspace({
             <div className="flex items-center gap-1 bg-secondary/60 rounded-xl p-1 border border-border w-max sm:w-full sm:flex-wrap min-w-0">
               {([
                 { id: 'dashboard', icon: <LayoutDashboard className="size-4" />, label: 'Dashboard' },
+                { id: 'weekly-plan', icon: <Calendar className="size-4" />, label: 'Weekly Plan' },
                 { id: 'timesheets', icon: <FileStack className="size-4" />, label: `Sheets (${pendingLogs.length})` },
                 { id: 'projects', icon: <FolderKanban className="size-4" />, label: 'Projects' },
                 { id: 'evaluations', icon: <Award className="size-4" />, label: 'Evaluations' },
@@ -622,6 +676,206 @@ export function DesignManagerWorkspace({
               </CardContent>
             </Card>
           </div>
+        </div>
+      )}
+
+      {/* WEEKLY PLAN TAB */}
+      {activeTab === 'weekly-plan' && (
+        <div className="flex flex-col gap-6">
+          <Card className="shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-border">
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <Calendar className="size-4.5 text-blue-500" />
+                  Design Department Weekly Plan
+                </CardTitle>
+                <CardDescription>Plan tasks and assign them to employees for the upcoming week.</CardDescription>
+              </div>
+              <Button size="sm" onClick={() => clearWeeklyTaskForm()} className="h-8 gap-1.5 font-bold">
+                <Plus className="size-3.5" /> Create Task
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              {weeklyTasks.length === 0 ? (
+                <div className="p-12 text-center text-sm text-muted-foreground">
+                  <Calendar className="size-10 mx-auto mb-3 text-muted-foreground/30" />
+                  No weekly tasks planned yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table className="w-full text-xs min-w-[800px]">
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="w-24">Task ID</TableHead>
+                        <TableHead className="w-32">Discipline</TableHead>
+                        <TableHead className="w-64">Task Description</TableHead>
+                        <TableHead className="w-24">Priority</TableHead>
+                        <TableHead className="w-32">Start - End</TableHead>
+                        <TableHead className="w-24">Deadline</TableHead>
+                        <TableHead className="w-48">Assigned To</TableHead>
+                        <TableHead className="w-24">Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {weeklyTasks.map((task: any) => (
+                        <TableRow key={task.id} className="hover:bg-muted/20">
+                          <TableCell className="font-mono font-bold text-[11px]">{task.task_code || '—'}</TableCell>
+                          <TableCell>{task.discipline || '—'}</TableCell>
+                          <TableCell className="max-w-[200px] truncate" title={task.task_description}>
+                            {task.task_description}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                              task.priority === 'High' ? 'bg-rose-100 text-rose-800' : task.priority === 'Low' ? 'bg-slate-100 text-slate-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {task.priority || 'Medium'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-[11px] text-muted-foreground">
+                            {task.start_date || '—'} <br/> {task.end_date || '—'}
+                          </TableCell>
+                          <TableCell className="text-[11px] text-muted-foreground">
+                            {task.deadline || '—'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {task.assigned_to?.map((empId: string) => {
+                                const emp = employees.find((e: any) => e.id === empId)
+                                return emp ? (
+                                  <span key={empId} className="inline-flex rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 text-[10px] font-semibold truncate max-w-[100px]" title={emp.full_name}>
+                                    {emp.full_name.split(' ')[0]}
+                                  </span>
+                                ) : null
+                              })}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                              task.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : task.status === 'On Hold' ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {task.status || 'Active'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-blue-600" onClick={() => handleEditWeeklyTask(task)}>
+                                <Edit2 className="size-3.5" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-rose-600" onClick={() => setDeleteConfirm({ id: task.id, tab: 'weeklyTasks' })}>
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Form for Create/Edit Weekly Task */}
+          {(editingWeeklyTaskId !== null || showWeeklyTaskForm) && (
+            <Card className="border-blue-500/30 shadow-sm relative overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+              <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
+              <CardHeader className="pb-4 border-b border-border/50">
+                <CardTitle className="text-sm font-bold flex items-center justify-between">
+                  <span>{editingWeeklyTaskId ? 'Edit Weekly Task' : 'Create New Weekly Task'}</span>
+                  <Button variant="ghost" size="sm" onClick={clearWeeklyTaskForm} className="h-6 text-xs text-muted-foreground">Cancel</Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <form onSubmit={handleWeeklyTaskSubmit} className="flex flex-col gap-5">
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold uppercase text-muted-foreground">Task Code</Label>
+                      <Input value={wtCode} onChange={e => setWtCode(e.target.value)} placeholder="e.g. BD/001" className="h-8 text-xs" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold uppercase text-muted-foreground">Discipline</Label>
+                      <Input value={wtDiscipline} onChange={e => setWtDiscipline(e.target.value)} placeholder="e.g. Architecture" className="h-8 text-xs" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-bold uppercase text-muted-foreground">Task Description *</Label>
+                    <Input value={wtDesc} onChange={e => setWtDesc(e.target.value)} required placeholder="Describe the task..." className="h-8 text-xs" />
+                  </div>
+
+                  <div className="grid sm:grid-cols-4 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold uppercase text-muted-foreground">Start Date</Label>
+                      <Input type="date" value={wtStart} onChange={e => setWtStart(e.target.value)} className="h-8 text-xs" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold uppercase text-muted-foreground">End Date</Label>
+                      <Input type="date" value={wtEnd} onChange={e => setWtEnd(e.target.value)} className="h-8 text-xs" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold uppercase text-muted-foreground">Deadline</Label>
+                      <Input type="date" value={wtDeadline} onChange={e => setWtDeadline(e.target.value)} className="h-8 text-xs" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold uppercase text-muted-foreground">Priority</Label>
+                      <Select value={wtPriority} onValueChange={setWtPriority}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="High" className="text-xs">High</SelectItem>
+                          <SelectItem value="Medium" className="text-xs">Medium</SelectItem>
+                          <SelectItem value="Low" className="text-xs">Low</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-bold uppercase text-muted-foreground">Assign To Employees</Label>
+                    <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2 border border-border rounded-lg p-3 max-h-40 overflow-y-auto bg-muted/20">
+                      {employees.map((emp: any) => (
+                        <label key={emp.id} className="flex items-center gap-2 text-xs cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={wtAssignedTo.includes(emp.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setWtAssignedTo([...wtAssignedTo, emp.id]);
+                              else setWtAssignedTo(wtAssignedTo.filter(id => id !== emp.id));
+                            }}
+                            className="rounded border-border"
+                          />
+                          <span className="truncate">{emp.full_name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold uppercase text-muted-foreground">Status</Label>
+                      <Select value={wtStatus} onValueChange={setWtStatus}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Active" className="text-xs">Active</SelectItem>
+                          <SelectItem value="On Hold" className="text-xs">On Hold</SelectItem>
+                          <SelectItem value="Completed" className="text-xs">Completed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-bold uppercase text-muted-foreground">Remarks</Label>
+                      <Input value={wtRemarks} onChange={e => setWtRemarks(e.target.value)} placeholder="Optional remarks..." className="h-8 text-xs" />
+                    </div>
+                  </div>
+
+                  <Button type="submit" disabled={savingWeeklyTask} className="w-full sm:w-auto self-end h-8 text-xs font-bold gap-2">
+                    {savingWeeklyTask ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                    {editingWeeklyTaskId ? 'Save Changes' : 'Create Weekly Task'}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
