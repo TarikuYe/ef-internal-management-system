@@ -44,7 +44,7 @@ export function SiteHeader() {
   const [user, setUser] = useState<any>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [role, setRole] = useState<string>('employee')
-  const [departmentId, setDepartmentId] = useState<string>('contract')
+  const [departmentId, setDepartmentId] = useState<string>('')
   const [displayName, setDisplayName] = useState<string>('')
   const [avatarUrl, setAvatarUrl] = useState<string>('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -110,7 +110,7 @@ export function SiteHeader() {
         if (!isSigningOut) {
           setUser(null)
           setRole('employee')
-          setDepartmentId('contract')
+          setDepartmentId('')
           setDisplayName('')
           setAuthLoading(false)
         }

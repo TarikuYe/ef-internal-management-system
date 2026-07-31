@@ -13,11 +13,13 @@ async function checkEOTAccess(userId: string) {
     .select('role, department_id')
     .eq('id', userId)
     .maybeSingle()
+  // Any authenticated employee can manage EOT records (scoped to their dept by project)
   return (
     employee?.role === 'admin' ||
     employee?.role === 'dgm' ||
     employee?.role === 'registrar' ||
-    employee?.department_id === 'contract'
+    employee?.role === 'manager' ||
+    employee?.role === 'employee'
   )
 }
 
@@ -85,7 +87,7 @@ export async function POST(request: Request) {
 
     const hasAccess = await checkEOTAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Authorized role or Contract department access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Authorized role required.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -174,7 +176,7 @@ export async function PATCH(request: Request) {
 
     const hasAccess = await checkEOTAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Authorized role or Contract department access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Authorized role required.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -230,7 +232,7 @@ export async function DELETE(request: Request) {
     }
     const hasAccess = await checkEOTAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Authorized role or Contract department access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Authorized role required.' }, { status: 403 })
     }
 
     const body = await request.json()

@@ -19,11 +19,12 @@ async function checkAdminOrDgm(userId: string, userEmail: string) {
     .select('role, department_id')
     .eq('id', userId)
     .maybeSingle()
+  // Any department manager can assign employees to projects in their dept
   return (
     employee?.role === 'admin' ||
     employee?.role === 'dgm' ||
     employee?.role === 'registrar' ||
-    (employee?.role === 'manager' && employee?.department_id === 'contract')
+    employee?.role === 'manager'
   )
 }
 

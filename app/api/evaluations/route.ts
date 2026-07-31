@@ -12,11 +12,12 @@ async function checkEvaluationsWriteAccess(userId: string) {
     .select('role, department_id')
     .eq('id', userId)
     .maybeSingle()
+  // Any department manager (not just contract) can write evaluations for their own dept
   return (
     employee?.role === 'admin' ||
     employee?.role === 'dgm' ||
     employee?.role === 'registrar' ||
-    (employee?.role === 'manager' && employee?.department_id === 'contract')
+    employee?.role === 'manager'
   )
 }
 
@@ -55,32 +56,8 @@ export async function GET(request: Request) {
       if (targetEmployeeId) {
         query = query.eq('employee_id', targetEmployeeId)
       }
-    } else if (
-      (currentEmp.role === 'manager' && currentEmp.department_id === 'contract') ||
-      currentEmp.role === 'registrar'
-    ) {
-      // Contract Admin manager AND registrar (who is IN contract dept) — both see contract dept only
-      if (targetEmployeeId) {
-        const { data: targetEmp } = await admin
-          .from('employees')
-          .select('department_id')
-          .eq('id', targetEmployeeId)
-          .maybeSingle()
-        if (targetEmp?.department_id === 'contract') {
-          query = query.eq('employee_id', targetEmployeeId)
-        } else {
-          return NextResponse.json({ error: 'Permission denied.' }, { status: 403 })
-        }
-      } else {
-        const { data: contractEmps } = await admin
-          .from('employees')
-          .select('id')
-          .eq('department_id', 'contract')
-        const empIds = (contractEmps ?? []).map(e => e.id)
-        query = query.in('employee_id', empIds)
-      }
-    } else if (currentEmp.role === 'manager') {
-      // Manager in any other department — scoped to their own dept
+    } else if (currentEmp.role === 'manager' || currentEmp.role === 'registrar') {
+      // Any department manager or registrar — scoped to their own department only
       if (targetEmployeeId) {
         const { data: targetEmp } = await admin
           .from('employees')
@@ -98,9 +75,12 @@ export async function GET(request: Request) {
           .select('id')
           .eq('department_id', currentEmp.department_id)
         const empIds = (deptEmps ?? []).map(e => e.id)
-        query = query.in('employee_id', empIds)
+        query = empIds.length > 0
+          ? query.in('employee_id', empIds)
+          : query.eq('employee_id', 'none') // returns empty set safely
       }
     } else {
+      // Regular employees see only their own evaluations
       query = query.eq('employee_id', currentEmp.id)
     }
 
@@ -130,7 +110,7 @@ export async function POST(request: Request) {
 
     const hasAccess = await checkEvaluationsWriteAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin, DGM, or Contract Manager access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Admin, DGM, or Department Manager access required.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -190,7 +170,7 @@ export async function PATCH(request: Request) {
 
     const hasAccess = await checkEvaluationsWriteAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin, DGM, or Contract Manager access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Admin, DGM, or Department Manager access required.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -245,7 +225,7 @@ export async function DELETE(request: Request) {
     }
     const hasAccess = await checkEvaluationsWriteAccess(user.id)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin, DGM, or Contract Manager access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Admin, DGM, or Department Manager access required.' }, { status: 403 })
     }
 
     const body = await request.json()

@@ -24,13 +24,13 @@ async function checkAdminOrDgm(userId: string, userEmail: string, allowRegistrar
       employee?.role === 'admin' ||
       employee?.role === 'dgm' ||
       employee?.role === 'registrar' ||
-      (employee?.role === 'manager' && employee?.department_id === 'contract')
+      employee?.role === 'manager'   // any dept manager
     )
   }
   return (
     employee?.role === 'admin' ||
     employee?.role === 'dgm' ||
-    (employee?.role === 'manager' && employee?.department_id === 'contract')
+    employee?.role === 'manager'     // any dept manager
   )
 }
 
@@ -55,7 +55,7 @@ export async function GET(_request: Request) {
       return NextResponse.json({ error: 'Admin access required.' }, { status: 403 })
     }
 
-    // Determine if caller is a contract manager or registrar — scope results to contract dept
+    // Determine caller's role — scope results to their own department for managers/registrar
     const admin = createAdminClient()
     const { data: caller } = await admin
       .from('employees')
@@ -63,9 +63,9 @@ export async function GET(_request: Request) {
       .eq('id', user.id)
       .maybeSingle()
 
-    const isContractScopedRole =
-      caller?.role === 'registrar' ||
-      (caller?.role === 'manager' && caller?.department_id === 'contract')
+    // True cross-dept roles see everyone; managers and registrar are scoped to their own dept
+    const isScopedRole =
+      caller?.role === 'registrar' || caller?.role === 'manager'
 
     let query = admin
       .from('employees')
@@ -73,9 +73,8 @@ export async function GET(_request: Request) {
       .not('role', 'eq', 'admin')
       .order('created_at', { ascending: true })
 
-    // Contract managers and registrars only see their own department
-    if (isContractScopedRole) {
-      query = query.eq('department_id', 'contract')
+    if (isScopedRole && caller?.department_id) {
+      query = query.eq('department_id', caller.department_id)
     }
 
     const { data: profiles, error } = await query
@@ -130,8 +129,23 @@ export async function POST(request: Request) {
     const body = await request.json()
     const fullName = String(body.full_name ?? '').trim()
     const email = String(body.email ?? '').trim().toLowerCase()
-    const departmentId = String(body.department_id ?? body.department ?? '').trim() || 'contract'
+    const isExec = ['dgm', 'gm'].includes(String(body.role ?? '').trim())
+    const departmentId = isExec ? null : (String(body.department_id ?? '').trim() || 'contract')
     const role = String(body.role ?? '').trim() || 'employee'
+
+    // Map department_id slug → ef_department enum value
+    const DEPT_ENUM_MAP: Record<string, string> = {
+      'contract':    'contract_admin',
+      'design':      'design',
+      'office-eng':  'office_engineering',
+      'procurement': 'procurement',
+      'supervision': 'supervision',
+    }
+    // Accept a pre-resolved enum value from the client, or derive it from department_id
+    const rawDeptEnum = String(body.department ?? '').trim()
+    const departmentEnum = isExec
+      ? null
+      : (rawDeptEnum || DEPT_ENUM_MAP[departmentId ?? ''] || departmentId || null)
 
     if (!fullName || !email) {
       return NextResponse.json({ error: 'Full name and email are required.' }, { status: 400 })
@@ -170,6 +184,7 @@ export async function POST(request: Request) {
         full_name: fullName,
         email,
         department_id: departmentId,
+        department: departmentEnum,
         role: role,
       })
       .select()
@@ -230,12 +245,24 @@ export async function PATCH(request: Request) {
     if (typeof body.full_name === 'string' && body.full_name.trim()) {
       updates.full_name = body.full_name.trim()
     }
-    const deptId: string | undefined =
-      typeof body.department_id === 'string' ? body.department_id.trim() || undefined
-      : typeof body.department === 'string'  ? body.department.trim()    || undefined
+    const deptId: string | null | undefined =
+      body.department_id !== undefined ? (String(body.department_id).trim() || null)
       : undefined
+
     if (deptId !== undefined) {
-      updates.department_id = deptId || null
+      updates.department_id = deptId
+
+      // Also update the ef_department enum column to keep both in sync
+      const DEPT_ENUM_MAP: Record<string, string> = {
+        'contract':    'contract_admin',
+        'design':      'design',
+        'office-eng':  'office_engineering',
+        'procurement': 'procurement',
+        'supervision': 'supervision',
+      }
+      // Use client-provided enum value if given, otherwise derive from department_id
+      const rawEnum = typeof body.department === 'string' ? body.department.trim() : ''
+      updates.department = deptId === null ? null : (rawEnum || DEPT_ENUM_MAP[deptId] || deptId)
     }
     if (typeof body.role === 'string') {
       updates.role = body.role.trim() || 'employee'

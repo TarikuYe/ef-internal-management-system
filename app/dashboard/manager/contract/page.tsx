@@ -59,6 +59,7 @@ export default async function ContractAdminManagerPage({
           userEmail={user.email}
           userName={employee.full_name}
           userDepartment={employee.department}
+          userDepartmentId={employee.department_id ?? 'contract'}
           userRole={employee.role}
           initialTab={initialTab}
         />

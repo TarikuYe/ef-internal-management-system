@@ -188,9 +188,9 @@ export function UserProfile({
   const memberYear = profile?.created_at ? new Date(profile.created_at).getFullYear() : null
   const displayName = profile?.full_name || userName
   const displayDept = (() => {
-    const d = profile?.department || userDepartment || ''
-    if (!d || d.toLowerCase().includes('contract') || d.includes('_')) return 'Contract Administration'
-    return d
+    const d = (profile?.department || userDepartment || '').trim()
+    if (!d) return 'Not set'
+    return d.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
   })()
 
   return (

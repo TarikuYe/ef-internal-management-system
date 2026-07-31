@@ -297,6 +297,13 @@ export async function POST(request: Request) {
         remark: log.remark ? String(log.remark).trim() : null,
         office_entrance_time: defaultEntrance,
         office_leave_time: defaultLeave,
+        task_code: log.task_code || null,
+        discipline: log.discipline || null,
+        deadline: log.deadline || null,
+        priority: log.priority || null,
+        starting_date: log.starting_date || null,
+        ending_date: log.ending_date || null,
+        task_status: log.task_status || null,
         // approval_status intentionally NOT set here — it starts as 'Pending'
         // and is managed exclusively via the /api/daily-work-logs/review route.
         // returned_log_id is a client-side hint only — never persisted.

@@ -84,6 +84,7 @@ export function ContractManagerWorkspace({
   userEmail,
   userName,
   userDepartment,
+  userDepartmentId = 'contract',
   userRole,
   initialTab = 'dashboard',
 }: {
@@ -91,6 +92,7 @@ export function ContractManagerWorkspace({
   userEmail: string
   userName: string
   userDepartment: string
+  userDepartmentId?: string
   userRole: string
   initialTab?: Tab
 }) {
@@ -138,12 +140,16 @@ export function ContractManagerWorkspace({
   const employees = useMemo(
     () => {
       const all = employeesData?.employees ?? []
-      // Contract dept employees — exclude executive cross-dept roles
-      return all.filter((e: any) =>
-        e.role !== 'admin' && e.role !== 'dgm' && e.role !== 'gm'
-      )
+      return all.filter((e: any) => {
+        if (e.role === 'admin' || e.role === 'dgm' || e.role === 'gm') return false
+        // When an admin/dgm browses this workspace, still scope to contract dept
+        if (userRole === 'admin' || userRole === 'dgm') {
+          return e.department_id === userDepartmentId
+        }
+        return true // API already scoped by dept — trust it
+      })
     },
-    [employeesData]
+    [employeesData, userDepartmentId, userRole]
   )
   const projects = projectsData?.projects ?? []
   const correspondence = correspondenceData?.correspondence ?? []

@@ -160,11 +160,30 @@ export function EmployeeManager() {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     setAdding(true)
+
+    // Map department_id slug → ef_department enum value for the DB column
+    const DEPT_ENUM_MAP: Record<string, string> = {
+      'contract':    'contract_admin',
+      'design':      'design',
+      'office-eng':  'office_engineering',
+      'procurement': 'procurement',
+      'supervision': 'supervision',
+    }
+    const isExec = ['dgm', 'gm'].includes(newRole)
+    const deptId = isExec ? null : (newDept || 'contract')
+    const deptEnum = isExec ? null : (DEPT_ENUM_MAP[deptId ?? ''] ?? deptId)
+
     try {
       const res = await fetch('/api/employees', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_name: newName, email: newEmail, department_id: (['dgm','gm'].includes(newRole)) ? null : (newDept || 'contract'), role: newRole || 'employee' }),
+        body: JSON.stringify({
+          full_name: newName,
+          email: newEmail,
+          department_id: deptId,
+          department: deptEnum,
+          role: newRole || 'employee',
+        }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Failed to create employee.')
@@ -186,11 +205,28 @@ export function EmployeeManager() {
 
   async function handleSaveEdit(id: string) {
     setSaving(true)
+
+    const DEPT_ENUM_MAP: Record<string, string> = {
+      'contract':    'contract_admin',
+      'design':      'design',
+      'office-eng':  'office_engineering',
+      'procurement': 'procurement',
+      'supervision': 'supervision',
+    }
+    const isExec = ['dgm', 'gm'].includes(editRole)
+    const deptEnum = isExec ? null : (DEPT_ENUM_MAP[editDept] ?? editDept ?? null)
+
     try {
       const res = await fetch('/api/employees', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, full_name: editName, department_id: editDept, role: editRole }),
+        body: JSON.stringify({
+          id,
+          full_name: editName,
+          department_id: isExec ? null : editDept,
+          department: deptEnum,
+          role: editRole,
+        }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Update failed.')

@@ -39,12 +39,31 @@ export async function GET() {
     // For DGM/GM roles there is no department — label them as Executive
     const role = ctx.emp?.role ?? ''
     const isExecutive = role === 'dgm' || role === 'gm'
-    const rawDept = ctx.emp?.department ?? ctx.emp?.department_id ?? ''
+    let rawDept = ctx.emp?.department ?? ctx.emp?.department_id ?? ''
+    if (role === 'manager' && ctx.emp?.department_id) {
+      rawDept = ctx.emp.department_id
+    }
+
+    const DEPT_MAP: Record<string, string> = {
+      'contract':           'Contract Administration',
+      'design':             'Design Department',
+      'procurement':        'Procurement Department',
+      'supervision':        'Supervision Department',
+      'office-eng':         'Office Engineering',
+      'office_eng':         'Office Engineering',
+      'contract_admin':     'Contract Administration',
+      'management':         'Management',
+      'office_engineering': 'Office Engineering',
+      'design_department':  'Design Department',
+    }
+    const slug = rawDept.toLowerCase().replace(/[\s-]/g, '_')
     const cleanDept = isExecutive
       ? 'Executive'
-      : (!rawDept || rawDept.toLowerCase().includes('contract') || rawDept.includes('_')
-          ? 'IT Department'
-          : rawDept)
+      : (DEPT_MAP[slug]
+          ?? (rawDept
+              ? rawDept.replace(/[_-]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+              : 'Not set')
+        )
 
     return NextResponse.json({
       profile: {

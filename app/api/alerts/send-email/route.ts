@@ -14,10 +14,11 @@ async function checkAdminAccess(userId: string) {
     .select('role, department_id')
     .eq('id', userId)
     .maybeSingle()
+  // Any department manager can send alert emails for their own registrar records
   return (
     employee?.role === 'dgm' ||
     employee?.role === 'admin' ||
-    (employee?.role === 'manager' && employee?.department_id === 'contract')
+    employee?.role === 'manager'
   )
 }
 

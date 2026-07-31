@@ -16,11 +16,12 @@ async function checkProjectsWriteAccess(userId: string, email: string) {
     .select('role, department_id')
     .eq('id', userId)
     .maybeSingle()
+  // Any department manager (not just contract) can create/delete projects
   return (
     employee?.role === 'admin' ||
     employee?.role === 'dgm' ||
     employee?.role === 'registrar' ||
-    (employee?.role === 'manager' && employee?.department_id === 'contract')
+    employee?.role === 'manager'
   )
 }
 
@@ -122,7 +123,7 @@ export async function POST(request: Request) {
     }
     const hasAccess = await checkProjectsWriteAccess(user.id, user.email)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin or Contract Manager access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Admin or Department Manager access required.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -197,7 +198,8 @@ export async function PATCH(request: Request) {
         .eq('id', user.id)
         .maybeSingle()
 
-      if (empProfile && empProfile.department_id === 'contract') {
+      // Any employee (regardless of dept) can update progress on a project they're assigned to
+      if (empProfile?.role === 'employee' || empProfile?.role === 'manager') {
         const { data: assignment } = await admin
           .from('employee_project_assignments')
           .select('project_code')
@@ -212,7 +214,7 @@ export async function PATCH(request: Request) {
     }
 
     if (!hasAccess && !isAssignedEmployee) {
-      return NextResponse.json({ error: 'Permission denied. Admin, Contract Manager, or assigned employee role required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Permission denied. Admin, Manager, or assigned employee role required.' }, { status: 403 })
     }
 
     // Limit fields employee can update
@@ -259,7 +261,7 @@ export async function DELETE(request: Request) {
     }
     const hasAccess = await checkProjectsWriteAccess(user.id, user.email)
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin or Contract Manager access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Admin or Department Manager access required.' }, { status: 403 })
     }
 
     const body = await request.json()

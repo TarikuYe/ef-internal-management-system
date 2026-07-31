@@ -93,7 +93,19 @@ export async function POST(request: Request) {
           .maybeSingle()
 
         if (!existingEmployee) {
-          // Create employee profile
+          // Map the ef_department enum value to the correct department_id slug
+          const DEPT_ID_MAP: Record<string, string> = {
+            'contract_admin':     'contract',
+            'management':         'contract',
+            'design':             'design',
+            'design_department':  'design',
+            'office_engineering': 'office-eng',
+            'procurement':        'procurement',
+            'supervision':        'supervision',
+          }
+          const rawDept = (department?.trim() || '').toLowerCase()
+          const resolvedDeptId = DEPT_ID_MAP[rawDept] ?? rawDept ?? null
+
           const { error: employeeError } = await admin
             .from('employees')
             .insert({
@@ -101,6 +113,7 @@ export async function POST(request: Request) {
               full_name: full_name.trim(),
               email: trimmedEmail,
               department: department?.trim() || null,
+              department_id: resolvedDeptId,
               active: true,
               role: role?.trim() || 'employee'
             })

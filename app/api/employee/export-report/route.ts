@@ -144,7 +144,7 @@ export async function GET(_req: Request) {
   const admin = createAdminClient()
   const { data: employee, error: empError } = await admin
     .from('employees')
-    .select('id, full_name, department, role')
+    .select('id, full_name, department, department_id, role')
     .eq('id', user.id)
     .maybeSingle()
 
@@ -164,6 +164,7 @@ export async function GET(_req: Request) {
     .select(
       'id, log_date, office_entrance_time, office_leave_time, actual_working_hour, hours_worked, ' +
       'assigned_tasks, actual_work_done, completion_percentage, remark, ' +
+      'task_code, discipline, deadline, priority, starting_date, ending_date, task_status, done_at_home, ' +
       'daily_work_log_reviews(approval_status, head_comments, reviewed_at)',
     )
     .eq('employee_id', employee.id)
@@ -212,6 +213,145 @@ export async function GET(_req: Request) {
     (r: any) =>
       !(r.approval_status === 'Returned' && datesWithNonReturned.has(r.log_date)),
   )
+
+  // ── 3.5 Check for Design Department ───────────────────────────────────────
+  const isDesignDept = employee.department_id === 'design' || employee.department?.toLowerCase() === 'design' || employee.department?.toLowerCase() === 'design_department' || employee.department?.toLowerCase() === 'office_engineering'
+
+  if (isDesignDept) {
+    const wb = new ExcelJS.Workbook()
+    wb.creator = 'EF Architects & Engineers Consulting'
+    wb.created = new Date()
+    wb.modified = new Date()
+
+    const ws = wb.addWorksheet('Weekly Report')
+    ws.views = [{ showGridLines: true, zoomScale: 100 }]
+
+    const DESIGN_COLUMNS = [
+      { header: 'Employee\nName',    width: 18 },
+      { header: 'Discipline',        width: 15 },
+      { header: 'Task\nCode',        width: 12 },
+      { header: 'Task Description',  width: 45 },
+      { header: 'Priority',          width: 10 },
+      { header: 'Starting Date',     width: 12 },
+      { header: 'Ending Date',       width: 12 },
+      { header: 'Deadline',          width: 12 },
+      { header: 'working\nhrs / 44\nhrs', width: 10 },
+      { header: 'Evaluation\nGrade %', width: 12 },
+      { header: 'Status',            width: 15 },
+      { header: 'Done\nat\nHome\n?', width: 10 },
+      { header: 'Head\'s\nAppro\nval', width: 12 },
+      { header: 'Remark',            width: 30 },
+    ]
+
+    DESIGN_COLUMNS.forEach((col, idx) => {
+      ws.getColumn(idx + 1).width = col.width
+    })
+
+    // Title Row 1-2 merged
+    ws.mergeCells('A1:D2')
+    const titleCell = ws.getCell('A1')
+    titleCell.value = 'EF ARCHITECTCTS AND ENGINEERS CONSULTING PLC\nDESIGN DEPARTMENT WEEKLY REPORT'
+    titleCell.font = { name: 'Times New Roman', size: 12, color: { argb: 'FF1F4E78' } }
+    titleCell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
+    allBorders(titleCell)
+
+    ws.mergeCells('E1:N2')
+    const weekCell = ws.getCell('E1')
+    weekCell.value = 'WEEKLY REPORT'
+    weekCell.font = { name: 'Times New Roman', size: 18, color: { argb: 'FF1F4E78' } }
+    weekCell.alignment = { vertical: 'middle', horizontal: 'center' }
+    allBorders(weekCell)
+
+    // Header Row 3
+    ws.getRow(3).height = 45
+    DESIGN_COLUMNS.forEach((col, idx) => {
+      const cell = ws.getRow(3).getCell(idx + 1)
+      cell.value = col.header
+      cell.font = { name: 'Times New Roman', size: 10, bold: true, color: { argb: 'FFFF0000' } }
+      cell.fill = solidFill('FFE2EFDA') // Light green
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
+      allBorders(cell)
+    })
+
+    const DATA_START_ROW = 4
+
+    const fmtDateShort = (d: any) => {
+      if (!d) return ''
+      try {
+        const dt = new Date(d)
+        return `${dt.getMonth() + 1}/${dt.getDate()}/${dt.getFullYear()}`
+      } catch {
+        return String(d).substring(0, 10)
+      }
+    }
+
+    rows.forEach((log: any, i: number) => {
+      const rowNum = DATA_START_ROW + i
+      const row = ws.getRow(rowNum)
+      row.height = 25
+
+      const band = i % 2 === 0 ? 'FFD9E1F2' : 'FFEDEDED' // Light blue and grey
+
+      const setCell = (colIdx: number, val: any, isCenter = true) => {
+        const c = row.getCell(colIdx)
+        c.value = val
+        c.font = { name: 'Times New Roman', size: 10, color: { argb: 'FF000000' } }
+        c.fill = solidFill(band)
+        
+        // Special formatting
+        if (colIdx === 5 && val === 'High') {
+          c.font = { name: 'Times New Roman', size: 10, color: { argb: 'FFFF0000' } }
+          c.fill = solidFill('FFFFC7CE')
+        } else if (colIdx === 11 && val === 'Completed') {
+          c.fill = solidFill('FFFFE699')
+          c.font = { name: 'Times New Roman', size: 10, color: { argb: 'FF9C5700' } }
+        }
+        
+        c.alignment = { vertical: 'middle', horizontal: isCenter ? 'center' : 'left', wrapText: true }
+        allBorders(c)
+        return c
+      }
+
+      setCell(1, employee.full_name, false)
+      setCell(2, log.discipline || '', false)
+      setCell(3, log.task_code || '')
+      
+      const taskText = [log.actual_work_done, log.assigned_tasks].filter(Boolean).join(' / ') || ''
+      setCell(4, taskText, false)
+
+      setCell(5, log.priority || '')
+      setCell(6, fmtDateShort(log.starting_date))
+      setCell(7, fmtDateShort(log.ending_date))
+      setCell(8, fmtDateShort(log.deadline))
+
+      const actualH = log.actual_working_hour != null ? Number(log.actual_working_hour) : NaN
+      const workedH = log.hours_worked != null ? Number(log.hours_worked) : NaN
+      let hoursVal = !isNaN(actualH) && actualH > 0 ? actualH : (!isNaN(workedH) && workedH > 0 ? workedH : '')
+      setCell(9, hoursVal)
+
+      const pctVal = log.completion_percentage != null ? Math.round(parseFloat(String(log.completion_percentage)) * 100) : ''
+      setCell(10, pctVal !== '' ? pctVal : '')
+
+      setCell(11, log.task_status || log.approval_status || '')
+      setCell(12, log.done_at_home ? 'Yes' : '')
+      setCell(13, log.approval_status === 'Approved' ? 'Approved' : '')
+      
+      const remarkText = [log.head_comments, log.remark].filter(Boolean).join(' · ') || ''
+      setCell(14, remarkText, false)
+    })
+
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer())
+    const filename = `Design_Weekly_Report_${employee.full_name.replace(/[^a-zA-Z0-9]/g, '_')}_${todayFileStamp()}.xlsx`
+
+    return new NextResponse(buffer, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store',
+      },
+    })
+  }
 
   // ── 4. Build workbook ─────────────────────────────────────────────────────
   const wb = new ExcelJS.Workbook()

@@ -28,23 +28,34 @@ export async function GET() {
       .eq('id', ctx.user.id)
       .maybeSingle()
 
-    const rawDept = emp?.department ?? emp?.department_id ?? ''
-    const DEPT_MAP: Record<string, string> = {
-      contract:       'Contract Administration',
-      contract_admin: 'Contract Administration',
-      management:     'Contract Administration',
-      design:         'Design',
-      procurement:    'Procurement',
-      supervision:    'Supervision',
+    let rawDept = emp?.department_id ?? emp?.department ?? ''
+    if (emp?.role === 'manager' && emp?.department_id) {
+      rawDept = emp.department_id
     }
+    const DEPT_MAP: Record<string, string> = {
+      // department_id slugs
+      'contract':           'Contract Administration',
+      'design':             'Design Department',
+      'procurement':        'Procurement Department',
+      'supervision':        'Supervision Department',
+      'office-eng':         'Office Engineering',
+      'office_eng':         'Office Engineering',
+      // ef_department enum values
+      'contract_admin':     'Contract Administration',
+      'management':         'Management',
+      'office_engineering': 'Office Engineering',
+      'design_department':  'Design Department',
+    }
+    // Normalise: lowercase + replace spaces/dashes with underscores for lookup
     const slug = rawDept.toLowerCase().replace(/[\s-]/g, '_')
     let cleanDept: string
     if (DEPT_MAP[slug]) {
       cleanDept = DEPT_MAP[slug]
-    } else if (rawDept.includes('_')) {
-      cleanDept = rawDept.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+    } else if (rawDept.includes('_') || rawDept.includes('-')) {
+      // Unknown slug — prettify it
+      cleanDept = rawDept.replace(/[_-]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
     } else {
-      cleanDept = rawDept || 'Contract Administration'
+      cleanDept = rawDept || 'Not set'
     }
 
     return NextResponse.json({
