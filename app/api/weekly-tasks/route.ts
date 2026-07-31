@@ -40,10 +40,9 @@ export async function GET(request: Request) {
     let query = admin.from('weekly_tasks').select('*').order('created_at', { ascending: false })
 
     if (currentEmp.role === 'employee') {
-      // Employees can only see tasks assigned to them and in active status
+      // Fetch all tasks for the department, then filter in JS to avoid Supabase JSONB contains issues
       query = query
-        .contains('assigned_to', [currentEmp.id])
-        .eq('status', 'Active')
+        .eq('department_id', currentEmp.department_id)
     } else {
       // Managers see all tasks for the requested department
       if (departmentId) {
@@ -58,7 +57,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to retrieve weekly tasks' }, { status: 500 })
     }
 
-    return NextResponse.json({ tasks })
+    let filteredTasks = tasks || []
+    if (currentEmp.role === 'employee') {
+      filteredTasks = filteredTasks.filter((t: any) => 
+        Array.isArray(t.assigned_to) && t.assigned_to.includes(currentEmp.id)
+      )
+    }
+
+    return NextResponse.json({ tasks: filteredTasks })
   } catch (err) {
     console.error('[weekly-tasks] GET unexpected:', err)
     return NextResponse.json({ error: 'Unexpected server error' }, { status: 500 })
@@ -88,7 +94,8 @@ export async function POST(request: Request) {
       deadline,
       assigned_to, 
       status, 
-      remarks 
+      remarks,
+      department_id
     } = body
 
     if (!task_description) {
@@ -96,8 +103,10 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient()
+    const finalDepartmentId = (['admin', 'dgm'].includes(currentEmp.role) && department_id) ? department_id : currentEmp.department_id
+
     const { data: task, error } = await admin.from('weekly_tasks').insert({
-      department_id: currentEmp.department_id,
+      department_id: finalDepartmentId,
       task_code: task_code || null,
       discipline: discipline || null,
       task_description,

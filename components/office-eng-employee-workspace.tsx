@@ -104,7 +104,7 @@ type Tab = 'dashboard' | 'timesheet' | 'projects' | 'evaluations' | 'profile'
 // Disciplines from the weekly report sample
 const DISCIPLINES = ['Architect', 'Civil', 'Electrical', 'Sanitary', 'Mechanical', 'Structural', 'Highway', 'Drafting', 'Other']
 
-export function DesignEmployeeWorkspace({
+export function OfficeEngEmployeeWorkspace({
   userId,
   userEmail,
   userName,
@@ -129,7 +129,7 @@ export function DesignEmployeeWorkspace({
   const { monday, sunday, days } = useMemo(() => getWeekRange(referenceDate), [referenceDate])
   const mondayStr = formatDateString(monday)
   const sundayStr = formatDateString(sunday)
-  const draftKey = `design-timesheet-draft-${userId}-${mondayStr}`
+  const draftKey = `office-eng-timesheet-draft-${userId}-${mondayStr}`
 
   const { data: timesheetData, mutate: mutateTimesheet, isLoading: timesheetLoading } = useSWR<{ logs: any[] }>(
     `/api/daily-work-logs?start_date=${mondayStr}&end_date=${sundayStr}`,
@@ -142,7 +142,7 @@ export function DesignEmployeeWorkspace({
   // Real-time listeners
   useEffect(() => {
     const supabase = createClient()
-    const channel = supabase.channel('design-emp-realtime')
+    const channel = supabase.channel('office-eng-emp-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_work_logs' }, () => mutateTimesheet())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_work_log_reviews' }, () => mutateTimesheet())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'employee_project_assignments' }, () => mutateProjects())
@@ -161,7 +161,7 @@ export function DesignEmployeeWorkspace({
     setReferenceDate(newRef)
   }
 
-  // Sync DB logs into local rows — adding design-specific fields
+  // Sync DB logs into local rows — adding office-engineering-specific fields
   useEffect(() => {
     if (!timesheetData) return
     const dbLogs = timesheetData.logs ?? []
@@ -444,7 +444,7 @@ export function DesignEmployeeWorkspace({
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-0.5 truncate">
-                  {userDepartment.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} Workspace &middot; Design Department Module
+                  {userDepartment.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())} Workspace &middot; Office Engineering Department Module
                 </p>
               </div>
             </div>
@@ -527,7 +527,7 @@ export function DesignEmployeeWorkspace({
             <Card className="md:col-span-1 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base font-bold">Quick Actions</CardTitle>
-                <CardDescription>Common design workflows.</CardDescription>
+                <CardDescription>Common office engineering workflows.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-2.5">
                 <Button onClick={() => setActiveTab('timesheet')} className="w-full justify-start text-xs font-semibold h-10 gap-2">
@@ -610,7 +610,7 @@ export function DesignEmployeeWorkspace({
         </div>
       )}
 
-      {/* TIMESHEET TAB — Design Weekly Report format */}
+      {/* TIMESHEET TAB — Office Engineering Weekly Report format */}
       {activeTab === 'timesheet' && (
         <div className="flex flex-col gap-4">
           {/* Week navigator */}
@@ -623,7 +623,7 @@ export function DesignEmployeeWorkspace({
                 <span className="block text-sm font-semibold text-foreground">
                   {new Date(monday).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} – {new Date(sunday).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </span>
-                <span className="text-[11px] text-muted-foreground">Design Department — Weekly Report Period</span>
+                <span className="text-[11px] text-muted-foreground">Office Engineering Department — Weekly Report Period</span>
               </div>
               <button onClick={() => navigateWeek(1)} className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:bg-secondary hover:text-foreground transition-all" title="Next Week">
                 <ChevronRight className="size-4" />
@@ -643,7 +643,7 @@ export function DesignEmployeeWorkspace({
             </div>
           </div>
 
-          {/* Design Weekly Report table — with Task Code, Discipline, Deadline columns */}
+          {/* Office Engineering Weekly Report table — with Task Code, Discipline, Deadline columns */}
           <div className="rounded-xl border border-border bg-card shadow-sm overflow-x-auto">
             {timesheetLoading ? (
               <div className="p-12 text-center text-xs text-muted-foreground">Loading timesheet...</div>
@@ -652,20 +652,16 @@ export function DesignEmployeeWorkspace({
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-36">Day / Date</th>
-                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-28">Discipline</th>
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-24">Task Code</th>
-                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground min-w-[280px]">Task Description *</th>
-                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground min-w-[280px]">Actual Work Done *</th>
+                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground min-w-[280px]">Assigned Tasks *</th>
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-24">Priority</th>
+                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground min-w-[280px]">Actual Work Done *</th>
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-28">Starting Date</th>
-                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-28">Ending Date</th>
-                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-28">Deadline</th>
-                    <th className="py-3 px-3 text-center text-xs font-bold text-foreground whitespace-nowrap w-20">working hrs /44 hrs</th>
-                    <th className="py-3 px-3 text-center text-xs font-bold text-foreground whitespace-nowrap w-24">Evaluation Grade %</th>
+                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-28">Completed Date</th>
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-32">Status</th>
-                    <th className="py-3 px-3 text-center text-xs font-bold text-foreground whitespace-nowrap w-20">Done at Home?</th>
-                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-28">Head's Approval</th>
+                    <th className="py-3 px-3 text-center text-xs font-bold text-foreground whitespace-nowrap w-24">% Complete</th>
                     <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-36">Remark</th>
+                    <th className="py-3 px-3 text-left text-xs font-bold text-foreground whitespace-nowrap w-28">Head's Approval</th>
                     <th className="py-3 px-3 text-center text-xs font-bold text-foreground whitespace-nowrap w-12">+/-</th>
                   </tr>
                 </thead>
@@ -706,20 +702,6 @@ export function DesignEmployeeWorkspace({
                           </td>
                         ) : null}
 
-                        {/* Discipline */}
-                        <td className="py-3 px-2 align-top">
-                          {fieldLocked ? (
-                            <span className="text-xs font-semibold text-foreground">{row.discipline || '—'}</span>
-                          ) : (
-                            <Select value={row.discipline} onValueChange={(v) => handleInputChange(idx, 'discipline', v)}>
-                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Discipline" /></SelectTrigger>
-                              <SelectContent>
-                                {DISCIPLINES.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </td>
-
                         {/* Task Code */}
                         <td className="py-3 px-2 align-top">
                           {locked ? (
@@ -757,19 +739,6 @@ export function DesignEmployeeWorkspace({
                           )}
                         </td>
 
-                        {/* Actual Work Done */}
-                        <td className="py-3 px-2 align-top">
-                          <textarea value={row.actual_work_done} onChange={(e) => handleInputChange(idx, 'actual_work_done', e.target.value)}
-                            disabled={locked} placeholder="Work accomplished..." rows={3}
-                            className="w-full min-h-[80px] text-xs p-1.5 rounded-md border border-input bg-transparent resize-y focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed leading-relaxed" />
-                          {!locked && (
-                            <button type="button" onClick={() => correctFieldText(idx, 'actual_work_done')} disabled={correctingKey === `${idx}-actual_work_done`}
-                              className="flex items-center gap-1 text-[10px] text-primary mt-0.5 hover:underline">
-                              {correctingKey === `${idx}-actual_work_done` ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}Fix with AI
-                            </button>
-                          )}
-                        </td>
-
                         {/* Priority */}
                         <td className="py-3 px-2 align-top">
                           {fieldLocked ? (
@@ -788,6 +757,19 @@ export function DesignEmployeeWorkspace({
                           )}
                         </td>
 
+                        {/* Actual Work Done */}
+                        <td className="py-3 px-2 align-top">
+                          <textarea value={row.actual_work_done} onChange={(e) => handleInputChange(idx, 'actual_work_done', e.target.value)}
+                            disabled={locked} placeholder="Work accomplished..." rows={3}
+                            className="w-full min-h-[80px] text-xs p-1.5 rounded-md border border-input bg-transparent resize-y focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed leading-relaxed" />
+                          {!locked && (
+                            <button type="button" onClick={() => correctFieldText(idx, 'actual_work_done')} disabled={correctingKey === `${idx}-actual_work_done`}
+                              className="flex items-center gap-1 text-[10px] text-primary mt-0.5 hover:underline">
+                              {correctingKey === `${idx}-actual_work_done` ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}Fix with AI
+                            </button>
+                          )}
+                        </td>
+
                         {/* Starting Date */}
                         <td className="py-3 px-2 align-top">
                           <Input type="date" value={row.starting_date} onChange={(e) => handleInputChange(idx, 'starting_date', e.target.value)}
@@ -798,27 +780,6 @@ export function DesignEmployeeWorkspace({
                         <td className="py-3 px-2 align-top">
                           <Input type="date" value={row.ending_date} onChange={(e) => handleInputChange(idx, 'ending_date', e.target.value)}
                             disabled={fieldLocked} className="h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed" />
-                        </td>
-
-                        {/* Deadline */}
-                        <td className="py-3 px-2 align-top">
-                          <Input type="date" value={row.deadline} onChange={(e) => handleInputChange(idx, 'deadline', e.target.value)}
-                            disabled={fieldLocked} className="h-8 text-xs disabled:opacity-50 disabled:cursor-not-allowed" />
-                        </td>
-
-                        {/* Working Hrs */}
-                        <td className="py-3 px-2 align-top text-center">
-                          <span className="text-xs font-bold text-foreground">{row.hours_worked} hrs</span>
-                        </td>
-
-                        {/* Evaluation Grade % */}
-                        <td className="py-3 px-2 align-top">
-                          <div className="flex flex-col gap-1 min-w-[80px]">
-                            <input type="range" min="0" max="100" step="1" value={completionPct}
-                              onChange={(e) => handleInputChange(idx, 'completion_percentage', parseFloat(e.target.value) / 100)}
-                              disabled={locked} className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-blue-500 disabled:opacity-50" />
-                            <span className="text-[11px] font-bold text-blue-600 text-right">{completionPct}%</span>
-                          </div>
                         </td>
 
                         {/* Status (Task Status) */}
@@ -836,10 +797,20 @@ export function DesignEmployeeWorkspace({
                           )}
                         </td>
 
-                        {/* Done at Home? */}
-                        <td className="py-3 px-2 align-top text-center">
-                          <input type="checkbox" checked={row.done_at_home} onChange={(e) => handleInputChange(idx, 'done_at_home', e.target.checked)}
-                            disabled={locked} className="size-4 rounded border-input accent-blue-500 cursor-pointer disabled:opacity-50" />
+                        {/* % Complete */}
+                        <td className="py-3 px-2 align-top">
+                          <div className="flex flex-col gap-1 min-w-[80px]">
+                            <input type="range" min="0" max="100" step="1" value={completionPct}
+                              onChange={(e) => handleInputChange(idx, 'completion_percentage', parseFloat(e.target.value) / 100)}
+                              disabled={locked} className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-blue-500 disabled:opacity-50" />
+                            <span className="text-[11px] font-bold text-blue-600 text-right">{completionPct}%</span>
+                          </div>
+                        </td>
+                        {/* Remark */}
+                        <td className="py-3 px-2 align-top">
+                          <textarea value={row.remark} onChange={(e) => handleInputChange(idx, 'remark', e.target.value)}
+                            disabled={locked} placeholder="Notes..." rows={2}
+                            className="w-full text-xs p-1.5 rounded-md border border-input bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed" />
                         </td>
 
                         {/* Head's Approval */}
@@ -849,13 +820,6 @@ export function DesignEmployeeWorkspace({
                             : row.approval_status === 'Returned' ? 'text-rose-700 bg-rose-100'
                             : 'text-amber-600 bg-amber-100'
                           }`}>{row.approval_status}</span>
-                        </td>
-
-                        {/* Remark */}
-                        <td className="py-3 px-2 align-top">
-                          <textarea value={row.remark} onChange={(e) => handleInputChange(idx, 'remark', e.target.value)}
-                            disabled={locked} placeholder="Notes..." rows={2}
-                            className="w-full text-xs p-1.5 rounded-md border border-input bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed" />
                         </td>
 
                         {/* Action */}
@@ -916,7 +880,7 @@ export function DesignEmployeeWorkspace({
           <Card className="md:col-span-2 shadow-sm">
             <CardHeader>
               <CardTitle className="text-base font-bold">Update Progress</CardTitle>
-              <CardDescription>Update design project metrics and remarks.</CardDescription>
+              <CardDescription>Update office engineering project metrics and remarks.</CardDescription>
             </CardHeader>
             <CardContent>
               {!selectedProjectId ? (
@@ -957,7 +921,7 @@ export function DesignEmployeeWorkspace({
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="dep-notes">Design Remarks &amp; Updates</Label>
+                    <Label htmlFor="dep-notes">Office Engineering Remarks &amp; Updates</Label>
                     <textarea id="dep-notes" value={projectNotes} onChange={(e) => setProjectNotes(e.target.value)}
                       placeholder="Revisions, challenges, milestones, next steps..." rows={4}
                       className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
@@ -982,7 +946,7 @@ export function DesignEmployeeWorkspace({
                 <Award className="size-5 text-amber-500" />
                 My Performance History
               </CardTitle>
-              <CardDescription>Evaluations submitted by the Design Department manager.</CardDescription>
+              <CardDescription>Evaluations submitted by the Office Engineering Department manager.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               {evaluations.length === 0 ? (

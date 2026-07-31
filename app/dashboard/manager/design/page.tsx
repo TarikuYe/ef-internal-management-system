@@ -59,7 +59,7 @@ export default async function DesignManagerPage({
           userEmail={user.email}
           userName={employee.full_name}
           userDepartment={employee.department}
-          userDepartmentId={employee.department_id ?? 'design'}
+          userDepartmentId="design"
           userRole={employee.role}
           initialTab={initialTab}
         />

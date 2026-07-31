@@ -51,7 +51,7 @@ const fetcher = async (url: string) => {
   const res = await fetch(url)
   const json = await res.json()
   if (!res.ok) {
-    console.error(`[DesignManagerWorkspace] API error ${res.status} for ${url}:`, json?.error)
+    console.error(`[OfficeEngManagerWorkspace] API error ${res.status} for ${url}:`, json?.error)
     return json
   }
   return json
@@ -72,7 +72,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
   return Math.round((diffMin / 60) * 10) / 10
 }
 
-export function DesignManagerWorkspace({
+export function OfficeEngManagerWorkspace({
   userId,
   userEmail,
   userName,
@@ -109,7 +109,7 @@ export function DesignManagerWorkspace({
   useEffect(() => {
     const supabase = createClient()
     const channel = supabase
-      .channel('design-mgr-realtime')
+      .channel('office-eng-mgr-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_work_logs' }, () => mutatePendingLogs())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_work_log_reviews' }, () => mutatePendingLogs())
       .subscribe()
@@ -521,14 +521,14 @@ export function DesignManagerWorkspace({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="font-display text-lg sm:text-2xl font-extrabold text-foreground leading-tight">
-                  Design Manager Control Tower
+                  Office Engineering Manager Control Tower
                 </h1>
                 <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-950 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-blue-800 dark:text-blue-300">
                   {userRole}
                 </span>
               </div>
               <p className="text-sm text-muted-foreground mt-0.5 truncate">
-                Design Department &middot; Weekly Report &amp; Evaluation Center
+                Office Engineering Department &middot; Weekly Report &amp; Evaluation Center
               </p>
             </div>
           </div>
@@ -580,7 +580,7 @@ export function DesignManagerWorkspace({
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-emerald-500">{projectStats.active}</div>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Design projects in progress</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Office Engineering projects in progress</p>
               </CardContent>
             </Card>
             )}
@@ -661,7 +661,7 @@ export function DesignManagerWorkspace({
               <CardHeader>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <Users className="size-4.5 text-primary" />
-                  Design Staff
+                  Office Engineering Staff
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -694,7 +694,7 @@ export function DesignManagerWorkspace({
               <div>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <Calendar className="size-4.5 text-blue-500" />
-                  Design Department Weekly Plan
+                  Office Engineering Department Weekly Plan
                 </CardTitle>
                 <CardDescription>Plan tasks and assign them to employees for the upcoming week.</CardDescription>
               </div>
@@ -714,13 +714,12 @@ export function DesignManagerWorkspace({
                     <TableHeader>
                       <TableRow className="bg-muted/30">
                         <TableHead className="w-24">Task ID</TableHead>
-                        <TableHead className="w-32">Discipline</TableHead>
                         <TableHead className="w-64">Task Description</TableHead>
                         <TableHead className="w-24">Priority</TableHead>
                         <TableHead className="w-32">Start - End</TableHead>
-                        <TableHead className="w-24">Deadline</TableHead>
                         <TableHead className="w-48">Assigned To</TableHead>
                         <TableHead className="w-24">Status</TableHead>
+                        <TableHead className="w-36">Manager Remark</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -728,7 +727,6 @@ export function DesignManagerWorkspace({
                       {weeklyTasks.map((task: any) => (
                         <TableRow key={task.id} className="hover:bg-muted/20">
                           <TableCell className="font-mono font-bold text-[11px]">{task.task_code || '—'}</TableCell>
-                          <TableCell>{task.discipline || '—'}</TableCell>
                           <TableCell className="max-w-[200px] truncate" title={task.task_description}>
                             {task.task_description}
                           </TableCell>
@@ -741,9 +739,6 @@ export function DesignManagerWorkspace({
                           </TableCell>
                           <TableCell className="text-[11px] text-muted-foreground">
                             {task.start_date || '—'} <br/> {task.end_date || '—'}
-                          </TableCell>
-                          <TableCell className="text-[11px] text-muted-foreground">
-                            {task.deadline || '—'}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
@@ -763,6 +758,9 @@ export function DesignManagerWorkspace({
                             }`}>
                               {task.status || 'Not Started'}
                             </span>
+                          </TableCell>
+                          <TableCell className="text-[11px] max-w-[150px] truncate" title={task.remarks}>
+                            {task.remarks || '—'}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
@@ -800,10 +798,7 @@ export function DesignManagerWorkspace({
                       <Label className="text-[11px] font-bold uppercase text-muted-foreground">Task Code</Label>
                       <Input value={wtCode} onChange={e => setWtCode(e.target.value)} placeholder="e.g. BD/001" className="h-8 text-xs" />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-bold uppercase text-muted-foreground">Discipline</Label>
-                      <Input value={wtDiscipline} onChange={e => setWtDiscipline(e.target.value)} placeholder="e.g. Architecture" className="h-8 text-xs" />
-                    </div>
+
                   </div>
 
                   <div className="space-y-1.5">
@@ -811,7 +806,7 @@ export function DesignManagerWorkspace({
                     <Input value={wtDesc} onChange={e => setWtDesc(e.target.value)} required placeholder="Describe the task..." className="h-8 text-xs" />
                   </div>
 
-                  <div className="grid sm:grid-cols-4 gap-4">
+                  <div className="grid sm:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-bold uppercase text-muted-foreground">Start Date</Label>
                       <Input type="date" value={wtStart} onChange={e => setWtStart(e.target.value)} className="h-8 text-xs" />
@@ -820,10 +815,7 @@ export function DesignManagerWorkspace({
                       <Label className="text-[11px] font-bold uppercase text-muted-foreground">End Date</Label>
                       <Input type="date" value={wtEnd} onChange={e => setWtEnd(e.target.value)} className="h-8 text-xs" />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-bold uppercase text-muted-foreground">Deadline</Label>
-                      <Input type="date" value={wtDeadline} onChange={e => setWtDeadline(e.target.value)} className="h-8 text-xs" />
-                    </div>
+
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-bold uppercase text-muted-foreground">Priority</Label>
                       <Select value={wtPriority} onValueChange={(v) => v && setWtPriority(v)}>
@@ -893,8 +885,8 @@ export function DesignManagerWorkspace({
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
-                  <CardTitle className="text-base font-bold">Pending Design Team Timesheets ({groupedTimesheets.length} Staff)</CardTitle>
-                  <CardDescription>Review weekly work logs grouped by design engineer. Each log includes task code, discipline, and deadline from the weekly report.</CardDescription>
+                  <CardTitle className="text-base font-bold">Pending Office Engineering Team Timesheets ({groupedTimesheets.length} Staff)</CardTitle>
+                  <CardDescription>Review weekly work logs grouped by office engineer. Each log includes task code, discipline, and deadline from the weekly report.</CardDescription>
                 </div>
                 {pendingLogs.length > 0 && (
                   <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-400 border border-blue-500/20 w-max">
@@ -951,7 +943,7 @@ export function DesignManagerWorkspace({
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
                               <div>
                                 <h4 className="font-bold text-xs text-foreground uppercase tracking-wider">Weekly Work Log — {group.employeeName}</h4>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Review daily task logs including task codes and discipline from the Design Weekly Report.</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">Review daily task logs including task codes and discipline from the Office Engineering Weekly Report.</p>
                               </div>
                               <Button size="sm" onClick={() => handleApproveAllForGroup(group)} disabled={submittingReview}
                                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8 gap-1.5">
@@ -1128,7 +1120,7 @@ export function DesignManagerWorkspace({
                 <CardHeader>
                   <CardTitle className="text-base font-bold flex items-center gap-2">
                     <Users className="size-4.5 text-primary" />
-                    Assign Design Engineer to Project
+                    Assign Office Engineer to Project
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1165,7 +1157,7 @@ export function DesignManagerWorkspace({
 
               {/* Projects list */}
               <Card className="shadow-sm">
-                <CardHeader><CardTitle className="text-base font-bold">Design Projects Directory</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base font-bold">Office Engineering Projects Directory</CardTitle></CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
                     <Table>
@@ -1218,7 +1210,7 @@ export function DesignManagerWorkspace({
           <Card className="lg:col-span-1 shadow-sm h-fit">
             <CardHeader>
               <CardTitle className="text-base font-bold">Log Performance Review</CardTitle>
-              <CardDescription>EF Design Dept — Weekly/Monthly Evaluation</CardDescription>
+              <CardDescription>EF Office Engineering Dept — Weekly/Monthly Evaluation</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleEvaluationSubmit} className="flex flex-col gap-3">
@@ -1302,7 +1294,7 @@ export function DesignManagerWorkspace({
           <Card className="lg:col-span-2 shadow-sm">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-bold">Design Department Performance History</CardTitle>
+                <CardTitle className="text-base font-bold">Office Engineering Department Performance History</CardTitle>
                 <button onClick={() => handleRefresh(mutateEvals, 'Evaluations')} className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground transition-colors" title="Refresh">
                   <RotateCw className="size-3.5" />
                 </button>
@@ -1368,13 +1360,13 @@ export function DesignManagerWorkspace({
             <CardHeader>
               <CardTitle className="text-lg font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
                 <FileSpreadsheet className="size-5" />
-                Master Design Department Excel Ledger
+                Master Office Engineering Department Excel Ledger
               </CardTitle>
-              <CardDescription>Export all design engineers, weekly work logs, project assignments, and performance evaluations in one multi-sheet workbook.</CardDescription>
+              <CardDescription>Export all office engineers, weekly work logs, project assignments, and performance evaluations in one multi-sheet workbook.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="text-xs text-muted-foreground">Includes: Staff Roster, Timesheet Logs, Project Assignments &amp; Performance Scorecards.</div>
-              <Button onClick={() => handleExportDownload('/api/export-master', 'EF_Design_Master_Report.xlsx')} className="w-full sm:w-auto font-bold gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow">
+              <Button onClick={() => handleExportDownload('/api/export-master', 'EF_Office_Engineering_Master_Report.xlsx')} className="w-full sm:w-auto font-bold gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow">
                 <Download className="size-4" />Export Master Excel (.xlsx)
               </Button>
             </CardContent>
@@ -1382,10 +1374,10 @@ export function DesignManagerWorkspace({
           <Card className="hover:shadow-md transition-shadow">
             <CardHeader>
               <CardTitle className="text-base font-bold">Performance Evaluations</CardTitle>
-              <CardDescription>Export all design engineer evaluation scorecards.</CardDescription>
+              <CardDescription>Export all office engineer evaluation scorecards.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={() => handleExportDownload('/api/registrar/export-performance', 'Design_Performance_Report.xlsx')} className="w-full font-bold gap-2">
+              <Button onClick={() => handleExportDownload('/api/registrar/export-performance', 'Office_Engineering_Performance_Report.xlsx')} className="w-full font-bold gap-2">
                 <Download className="size-4" />Download Evals (.xlsx)
               </Button>
             </CardContent>
@@ -1396,7 +1388,7 @@ export function DesignManagerWorkspace({
               <CardDescription>Export all engineer daily work logs and attendance hours.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={() => handleExportDownload('/api/registrar/export-work-logs', 'Design_Work_Logs_Report.xlsx')} className="w-full font-bold gap-2">
+              <Button onClick={() => handleExportDownload('/api/registrar/export-work-logs', 'Office_Engineering_Work_Logs_Report.xlsx')} className="w-full font-bold gap-2">
                 <Download className="size-4" />Download Work Logs (.xlsx)
               </Button>
             </CardContent>
@@ -1404,10 +1396,10 @@ export function DesignManagerWorkspace({
           <Card className="hover:shadow-md transition-shadow">
             <CardHeader>
               <CardTitle className="text-base font-bold">Project Status Report</CardTitle>
-              <CardDescription>Export design project progress and assignment details.</CardDescription>
+              <CardDescription>Export office engineering project progress and assignment details.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={() => handleExportDownload('/api/export-master', 'Design_Projects_Report.xlsx')} variant="outline" className="w-full font-bold gap-2">
+              <Button onClick={() => handleExportDownload('/api/export-master', 'Office_Engineering_Projects_Report.xlsx')} variant="outline" className="w-full font-bold gap-2">
                 <Download className="size-4" />Download Projects (.xlsx)
               </Button>
             </CardContent>
