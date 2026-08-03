@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { SignOutButton } from '@/components/sign-out-button'
 import { isSigningOut } from '@/lib/sign-out-state'
 import React, { useEffect, useState, useMemo } from 'react'
+import Image from 'next/image'
 
 const ROUTING_DICTIONARY: Record<string, { label: string; href: string; icon: any }[]> = {
   // 'employee' is the actual DB value for regular staff
@@ -180,16 +181,14 @@ export function SiteHeader() {
     <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Compass className="size-5" strokeWidth={2.2} />
-          </span>
-          <span className="font-display text-lg font-extrabold leading-none tracking-tight">
-            <span className="text-foreground">EF</span>{' '}
-            <span className="text-accent">A&E</span>
-            <span className="block text-[11px] font-medium tracking-wide text-muted-foreground">
-              Internal Management Portal
-            </span>
-          </span>
+          <Image 
+            src="/logo.png" 
+            alt="EF A&E Logo" 
+            width={150} 
+            height={40} 
+            className="h-10 w-auto" 
+            priority 
+          />
         </Link>
 
         {authLoading ? (
@@ -307,12 +306,14 @@ export function SiteHeader() {
 
               <div className="relative flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2">
-                  <span className="flex size-7 items-center justify-center rounded-md bg-white/15">
-                    <Compass className="size-4 text-white" strokeWidth={2.2} />
-                  </span>
-                  <span className="font-display text-sm font-bold text-white/90 tracking-wide">
-                    EF A&E
-                  </span>
+                  <Image 
+                    src="/logo.png" 
+                    alt="EF A&E Logo" 
+                    width={150} 
+                    height={40} 
+                    className="h-8 w-auto brightness-0 invert" 
+                    priority 
+                  />
                 </div>
                 <button
                   onClick={() => setMobileMenuOpen(false)}

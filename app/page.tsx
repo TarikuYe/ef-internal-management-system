@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import {
@@ -96,16 +97,14 @@ export default async function HomePage() {
       <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
-              <Compass className="size-5" strokeWidth={2.2} />
-            </span>
-            <span className="font-display text-lg font-extrabold leading-none tracking-tight">
-              <span className="text-foreground">EF</span>{' '}
-              <span className="text-accent">A&E</span>
-              <span className="block text-[11px] font-medium tracking-wide text-muted-foreground">
-                Management Portal
-              </span>
-            </span>
+            <Image 
+              src="/logo.png" 
+              alt="EF A&E Logo" 
+              width={150} 
+              height={40} 
+              className="h-10 w-auto" 
+              priority 
+            />
           </Link>
           <nav className="flex items-center gap-2">
             <Link

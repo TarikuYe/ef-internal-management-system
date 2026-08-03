@@ -7,6 +7,7 @@
 // a form for the department head to log a site progress note.
 
 import { useEffect, useState, use } from 'react'
+import Image from 'next/image'
 import {
   Compass, CalendarX2, Clock3, Building2, Calendar,
   Hash, Loader2, CheckCircle2, AlertCircle, ClipboardList,
@@ -194,8 +195,8 @@ export default function EotNoticePage({
             style={{ background: '#475569' }}
           >
             <div className="flex items-center gap-3">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-white/10">
-                <Compass className="size-5 text-white" />
+              <div className="flex justify-center">
+                <Image src="/logo.png" alt="EF A&E Logo" width={36} height={36} className="h-9 w-auto brightness-0 invert" priority />
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300">

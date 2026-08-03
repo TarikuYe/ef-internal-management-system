@@ -1,22 +1,17 @@
 import Link from 'next/link'
-import { Compass } from 'lucide-react'
+import Image from 'next/image'
 
-export function Logo({ inverted = false }: { inverted?: boolean }) {
+export function Logo({ inverted = false, className }: { inverted?: boolean, className?: string }) {
   return (
-    <Link href="/" className="flex items-center gap-2.5">
-      <span
-        className={`flex size-9 items-center justify-center rounded-md ${inverted ? 'bg-accent text-accent-foreground' : 'bg-primary text-primary-foreground'
-          }`}
-      >
-        <Compass className="size-5" strokeWidth={2.2} />
-      </span>
-      <span className="font-display text-lg font-extrabold leading-none tracking-tight">
-        <span className={inverted ? 'text-primary-foreground' : 'text-foreground'}>EF</span>{' '}
-        <span className="text-accent">A&E</span>
-        <span className="block text-[11px] font-medium tracking-wide text-muted-foreground">
-          Internal Management Portal
-        </span>
-      </span>
+    <Link href="/" className={`flex items-center gap-2.5 ${className || ''}`}>
+      <Image 
+        src="/logo.png" 
+        alt="EF A&E Logo" 
+        width={150} 
+        height={40} 
+        className={`h-10 w-auto ${inverted ? 'brightness-0 invert' : ''}`} 
+        priority 
+      />
     </Link>
   )
 }

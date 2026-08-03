@@ -8,6 +8,7 @@
 // the bond's expiry date and stamps renewal_submitted_at in the DB.
 
 import { useEffect, useState, use } from 'react'
+import Image from 'next/image'
 import {
   Compass, ShieldAlert, CalendarX2, BadgeCheck,
   Clock3, Building2, Layers, CheckCircle2,
@@ -205,8 +206,8 @@ export default function BondNoticePage({
             style={{ background: '#1E3A8A' }}
           >
             <div className="flex items-center gap-3">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-white/10">
-                <Compass className="size-5 text-white" />
+              <div className="flex justify-center">
+                <Image src="/logo.png" alt="EF A&E Logo" width={36} height={36} className="h-9 w-auto brightness-0 invert" priority />
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-blue-200">

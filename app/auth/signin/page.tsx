@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useState } from 'react'
+import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -63,14 +64,14 @@ function SignInForm() {
         <div className="w-full max-w-sm">
           <div className="rounded-xl border border-border bg-card shadow-sm">
             <div className="border-b border-border px-6 py-5 text-center">
-              <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Compass className="size-6" strokeWidth={2.2} />
+              <div className="mx-auto mb-3 flex justify-center">
+                <Image src="/logo.png" alt="EF A&E Logo" width={150} height={40} className="h-12 w-auto" priority />
               </div>
               <h1 className="font-display text-xl font-extrabold tracking-tight text-foreground">
                 Welcome back
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Sign in to the EF A&E Internal Management Portal
+                Sign in to the Internal Management Portal
               </p>
             </div>
 
