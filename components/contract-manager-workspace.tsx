@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Download,
   Search,
+  Filter,
   CheckSquare,
   ChevronRight,
   ChevronDown,
@@ -425,6 +426,7 @@ export function ContractManagerWorkspace({
   const [bondAmount, setBondAmount] = useState('')
   const [bondStatus, setBondStatus] = useState<'Active' | 'Expired' | 'Released'>('Active')
   const [bondNotificationEmail, setBondNotificationEmail] = useState('')
+  const [bondOptionalEmail, setBondOptionalEmail] = useState('')
 
   // EOT form state
   const [eotClient, setEotClient] = useState('')
@@ -436,6 +438,17 @@ export function ContractManagerWorkspace({
   const [eotStatus, setEotStatus] = useState<'Approved' | 'Rejected' | 'Pending' | 'Under Review'>('Pending')
   const [eotReason, setEotReason] = useState('')
   const [eotNotificationEmail, setEotNotificationEmail] = useState('')
+  const [eotOptionalEmail, setEotOptionalEmail] = useState('')
+
+  // Multi-contractor hierarchy & filtering states
+  const [bondFilterEmployer, setBondFilterEmployer] = useState('')
+  const [bondFilterProject, setBondFilterProject] = useState('')
+  const [bondFilterContractor, setBondFilterContractor] = useState('')
+  const [eotFilterEmployer, setEotFilterEmployer] = useState('')
+  const [eotFilterProject, setEotFilterProject] = useState('')
+  const [eotFilterContractor, setEotFilterContractor] = useState('')
+  const [showBondFilters, setShowBondFilters] = useState(false)
+  const [showEotFilters, setShowEotFilters] = useState(false)
 
   // Evaluations form state
   const [evalEmployeeId, setEvalEmployeeId] = useState('')
@@ -870,7 +883,7 @@ export function ContractManagerWorkspace({
       expiry_date: bondExpiryDate,
       amount: bondAmount ? parseFloat(bondAmount) : null,
       status: bondStatus,
-      assigned_manager_email: bondNotificationEmail || 'team@efae.com'
+      assigned_manager_email: [bondNotificationEmail, bondOptionalEmail].filter(Boolean).join(',') || 'team@efae.com'
     }
     if (editId) payload.id = editId
 
@@ -901,6 +914,7 @@ export function ContractManagerWorkspace({
     setBondAmount('')
     setBondStatus('Active')
     setBondNotificationEmail('')
+    setBondOptionalEmail('')
   }
 
   const handleEotSubmit = async (e: React.FormEvent) => {
@@ -915,7 +929,7 @@ export function ContractManagerWorkspace({
       revised_completion_date: eotRevDate,
       status: eotStatus,
       reason_for_eot: eotReason,
-      assigned_manager_email: eotNotificationEmail || 'team@efae.com'
+      assigned_manager_email: [eotNotificationEmail, eotOptionalEmail].filter(Boolean).join(',') || 'team@efae.com'
     }
     if (editId) payload.id = editId
 
@@ -946,6 +960,7 @@ export function ContractManagerWorkspace({
     setEotStatus('Pending')
     setEotReason('')
     setEotNotificationEmail('')
+    setEotOptionalEmail('')
   }
 
   // 5. Submit Evaluation
@@ -1087,8 +1102,81 @@ export function ContractManagerWorkspace({
     return evaluations.reduce((sum: number, e: any) => sum + Number(e.total_score || 0), 0) / evaluations.length
   }, [evaluations])
 
+  const filteredBonds = useMemo(() => {
+    return bonds.filter((b: any) => {
+      const matchEmp = !bondFilterEmployer || (b.employer_name || '').toLowerCase().includes(bondFilterEmployer.toLowerCase())
+      const matchProj = !bondFilterProject || (b.project_name || '').toLowerCase().includes(bondFilterProject.toLowerCase())
+      const matchCont = !bondFilterContractor || (b.contractor_name || '').toLowerCase().includes(bondFilterContractor.toLowerCase())
+      return matchEmp && matchProj && matchCont
+    })
+  }, [bonds, bondFilterEmployer, bondFilterProject, bondFilterContractor])
+
+  const filteredEots = useMemo(() => {
+    return eots.filter((e: any) => {
+      const matchEmp = !eotFilterEmployer || (e.client_name || '').toLowerCase().includes(eotFilterEmployer.toLowerCase())
+      const matchProj = !eotFilterProject || (e.project_name || '').toLowerCase().includes(eotFilterProject.toLowerCase())
+      const matchCont = !eotFilterContractor || (e.contractor_name || '').toLowerCase().includes(eotFilterContractor.toLowerCase())
+      return matchEmp && matchProj && matchCont
+    })
+  }, [eots, eotFilterEmployer, eotFilterProject, eotFilterContractor])
+
+  const uniqueEmployers = useMemo(() => {
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.employer_name) list.add(b.employer_name) })
+    eots.forEach((e: any) => { if (e.client_name) list.add(e.client_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots])
+
+  const bondProjectsList = useMemo(() => {
+    if (!bondEmployer) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.employer_name === bondEmployer && b.project_name) list.add(b.project_name) })
+    eots.forEach((e: any) => { if (e.client_name === bondEmployer && e.project_name) list.add(e.project_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, bondEmployer])
+
+  const bondContractorsList = useMemo(() => {
+    if (!bondProject) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.project_name === bondProject && b.contractor_name) list.add(b.contractor_name) })
+    eots.forEach((e: any) => { if (e.project_name === bondProject && e.contractor_name) list.add(e.contractor_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, bondProject])
+  
+  const eotProjectsList = useMemo(() => {
+    if (!eotClient) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.employer_name === eotClient && b.project_name) list.add(b.project_name) })
+    eots.forEach((e: any) => { if (e.client_name === eotClient && e.project_name) list.add(e.project_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, eotClient])
+
+  const eotContractorsList = useMemo(() => {
+    if (!eotProject) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.project_name === eotProject && b.contractor_name) list.add(b.contractor_name) })
+    eots.forEach((e: any) => { if (e.project_name === eotProject && e.contractor_name) list.add(e.contractor_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, eotProject])
+
   return (
     <div className="flex flex-col gap-6">
+      {/* Hidden Datalists for Combobox behavior */}
+      <datalist id="unique-employers">
+        {uniqueEmployers.map(emp => <option key={emp} value={emp} />)}
+      </datalist>
+      <datalist id="bond-projects-list">
+        {bondProjectsList.map(p => <option key={p} value={p} />)}
+      </datalist>
+      <datalist id="bond-contractors-list">
+        {bondContractorsList.map(c => <option key={c} value={c} />)}
+      </datalist>
+      <datalist id="eot-projects-list">
+        {eotProjectsList.map(p => <option key={p} value={p} />)}
+      </datalist>
+      <datalist id="eot-contractors-list">
+        {eotContractorsList.map(c => <option key={c} value={c} />)}
+      </datalist>
       {/* Premium Header Profile Block */}
       <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-r from-amber-500/10 via-background to-background p-4 sm:p-6 shadow-sm">
         <div className="absolute right-0 top-0 translate-x-1/3 -translate-y-1/3 size-36 rounded-full bg-amber-500/5 blur-2xl pointer-events-none" />
@@ -1133,6 +1221,7 @@ export function ContractManagerWorkspace({
                 <FileStack className="size-4" />
                 <span>Sheets ({pendingLogs.length})</span>
               </button>
+              {/*
               <button
                 onClick={() => setActiveTab('projects')}
                 className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 sm:px-3 py-2 text-xs font-semibold transition-all ${
@@ -1142,6 +1231,7 @@ export function ContractManagerWorkspace({
                 <FolderKanban className="size-4" />
                 <span>Projects</span>
               </button>
+              */}
               <button
                 onClick={() => setActiveTab('registrar')}
                 className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 sm:px-3 py-2 text-xs font-semibold transition-all ${
@@ -1262,7 +1352,7 @@ export function ContractManagerWorkspace({
           </div>
 
           <div className="grid gap-6 md:grid-cols-3">
-            {/* Project Progress Summary Widget */}
+            {/* Project Progress Summary Widget 
             <Card className="md:col-span-2 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -1306,6 +1396,7 @@ export function ContractManagerWorkspace({
                 )}
               </CardContent>
             </Card>
+            */}
 
             {/* Department Workload widget */}
             <Card className="md:col-span-1 shadow-sm">
@@ -1702,11 +1793,10 @@ export function ContractManagerWorkspace({
         </div>
       )}
 
-      {/* Tab 3: Projects & Assignments Manager */}
+      {/* Tab 3: Projects & Assignments Manager 
       {activeTab === 'projects' && (
         <div className="flex flex-col gap-6">
           <div className="grid gap-6 lg:grid-cols-3">
-            {/* Create Project Form */}
             <Card className="lg:col-span-1 shadow-sm h-fit">
               <CardHeader>
                 <CardTitle className="text-base font-bold">
@@ -1714,192 +1804,167 @@ export function ContractManagerWorkspace({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleProjectSubmit} className="flex flex-col gap-3">
-                  <div className="flex flex-col gap-1">
-                    <Label htmlFor="p-code">Project Code *</Label>
-                    <Input id="p-code" value={projectCode} onChange={(e) => setProjectCode(e.target.value)} required placeholder="e.g. EF-2402" disabled={!!editingProjectId} />
+                <form onSubmit={handleProjectSubmit} className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="pcode">Project Code</Label>
+                    <Input id="pcode" value={projectCode} onChange={e => setProjectCode(e.target.value)} required placeholder="e.g. PRJ-2024-001" className="h-8 text-xs font-mono" />
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <Label htmlFor="p-name">Project Name *</Label>
-                    <Input id="p-name" value={projectName} onChange={(e) => setProjectName(e.target.value)} required placeholder="e.g. Civic Center" />
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="pname">Project Name</Label>
+                    <Input id="pname" value={projectName} onChange={e => setProjectName(e.target.value)} required placeholder="Addis Ababa Mall Construction..." className="h-8 text-xs" />
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <Label htmlFor="p-client">Client Name</Label>
-                    <Input id="p-client" value={projectClient} onChange={(e) => setProjectClient(e.target.value)} />
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="ppriority">Priority</Label>
+                    <Select value={projectPriority} onValueChange={setProjectPriority}>
+                      <SelectTrigger id="ppriority" className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Low">Low</SelectItem>
+                        <SelectItem value="Medium">Medium</SelectItem>
+                        <SelectItem value="High">High</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <Label htmlFor="p-contr">Contractor Name</Label>
-                    <Input id="p-contr" value={projectContractor} onChange={(e) => setProjectContractor(e.target.value)} />
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="pprog">Initial Progress (%)</Label>
+                    <Input id="pprog" type="number" min="0" max="100" value={projectProgress} onChange={e => setProjectProgress(e.target.value)} className="h-8 text-xs font-mono" />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex flex-col gap-1">
-                      <Label htmlFor="p-start">Start Date</Label>
-                      <Input id="p-start" type="date" value={projectStart} onChange={(e) => setProjectStart(e.target.value)} />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <Label htmlFor="p-end">End Date</Label>
-                      <Input id="p-end" type="date" value={projectEnd} onChange={(e) => setProjectEnd(e.target.value)} />
-                    </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="pnotes">Remarks</Label>
+                    <textarea
+                      id="pnotes"
+                      value={projectNotes}
+                      onChange={e => setProjectNotes(e.target.value)}
+                      rows={2}
+                      className="w-full text-xs p-1.5 rounded-md border border-input bg-background resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex flex-col gap-1">
-                      <Label htmlFor="p-pri">Priority</Label>
-                      <Select value={projectPriority} onValueChange={(val: any) => setProjectPriority(val || '')}>
-                        <SelectTrigger id="p-pri"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Low">Low</SelectItem>
-                          <SelectItem value="Medium">Medium</SelectItem>
-                          <SelectItem value="High">High</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <Label htmlFor="p-status">Status</Label>
-                      <Select value={projectStatus} onValueChange={(val: any) => setProjectStatus(val || '')}>
-                        <SelectTrigger id="p-status"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Active">Active</SelectItem>
-                          <SelectItem value="On Hold">On Hold</SelectItem>
-                          <SelectItem value="Completed">Completed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2 mt-2">
-                    <Button type="submit" disabled={savingProject} className="flex-1">
-                      {savingProject ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
-                      {editingProjectId ? 'Save Changes' : 'Create Project'}
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button type="submit" disabled={isProjectSubmitting} className="flex-1 font-bold h-8 text-xs">
+                      {isProjectSubmitting ? <Loader2 className="size-3 animate-spin mr-1" /> : null}
+                      {editingProjectId ? 'Save Updates' : 'Register Project'}
                     </Button>
                     {editingProjectId && (
-                      <Button type="button" variant="outline" onClick={clearProjectForm}>Cancel</Button>
+                      <Button type="button" variant="outline" onClick={clearProjectForm} className="h-8 text-xs">Cancel</Button>
                     )}
                   </div>
+                </form>
+
+                <div className="my-6 border-t border-border" />
+                <h3 className="text-sm font-bold text-foreground mb-3">Assign Employee to Project</h3>
+                <form onSubmit={handleAssignEmployee} className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label>Select Employee</Label>
+                    <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="-- Choose an employee --" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {employees.map((emp: any) => (
+                          <SelectItem key={emp.id} value={emp.id}>
+                            {emp.full_name} ({emp.role})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label>Select Project</Label>
+                    <Select value={selectedAssignProjId} onValueChange={setSelectedAssignProjId}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="-- Choose a project --" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projects.map((proj: any) => (
+                          <SelectItem key={proj.id} value={proj.id}>
+                            <span className="font-mono text-[10px] mr-1">{proj.code}</span>
+                            {proj.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button type="submit" disabled={assigning} className="h-10 font-bold shrink-0">
+                    {assigning ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
+                    Assign Team Member
+                  </Button>
                 </form>
               </CardContent>
             </Card>
 
-            <div className="lg:col-span-2 flex flex-col gap-6">
-              {/* Assign Project to Employee */}
-              <Card className="shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <Users className="size-4.5 text-primary" />
-                    Assign Project to Employee
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleAssignSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                    <div className="flex-1 flex flex-col gap-1.5">
-                      <Label htmlFor="assign-emp">Select Employee</Label>
-                      <Select value={selectedAssignEmployeeId} onValueChange={(val: any) => setSelectedAssignEmployeeId(val || '')}>
-                        <SelectTrigger id="assign-emp">
-                          <SelectValue placeholder="Choose employee..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {employees.map((emp: any) => (
-                            <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base font-bold">Projects Directory</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="flex flex-col divide-y divide-border md:hidden">
+                  {projects.map((proj: any) => (
+                    <div key={proj.id} className={`p-4 flex items-start justify-between gap-3 ${!proj.active ? 'opacity-50' : ''}`}>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-foreground">{proj.code}</span>
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            proj.priority === 'High' ? 'bg-rose-100 text-rose-800'
+                            : proj.priority === 'Medium' ? 'bg-amber-100 text-amber-800'
+                            : 'bg-slate-100 text-slate-800'
+                          }`}>{proj.priority || 'Medium'}</span>
+                        </div>
+                        <div className="text-sm font-semibold text-foreground mt-0.5">{proj.name}</div>
+                        <div className="text-xs font-bold text-emerald-600 mt-0.5">{Number(proj.progress_percentage || 0)}% complete</div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => handleEditProject(proj)} className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-secondary"><Edit2 className="size-3.5" /></button>
+                        <button onClick={() => handleDeleteRecord(proj.id, 'projects')} className="inline-flex size-8 items-center justify-center rounded-md border text-destructive hover:bg-rose-50"><Trash2 className="size-3.5" /></button>
+                      </div>
                     </div>
-
-                    <div className="flex-1 flex flex-col gap-1.5">
-                      <Label htmlFor="assign-proj">Select Project</Label>
-                      <Select value={selectedAssignProjectCode} onValueChange={(val: any) => setSelectedAssignProjectCode(val || '')}>
-                        <SelectTrigger id="assign-proj">
-                          <SelectValue placeholder="Choose project..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {projects.filter(p => p.active).map((proj: any) => (
-                            <SelectItem key={proj.code} value={proj.code}>{proj.code} — {proj.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <Button type="submit" disabled={assigning} className="h-10 font-bold shrink-0">
-                      {assigning ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
-                      Assign Team Member
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-
-              {/* Projects List */}
-              <Card className="shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base font-bold">Projects Directory</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {/* Mobile card view */}
-                  <div className="flex flex-col divide-y divide-border md:hidden">
-                    {projects.map((proj: any) => (
-                      <div key={proj.id} className={`p-4 flex items-start justify-between gap-3 ${!proj.active ? 'opacity-50' : ''}`}>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono text-xs font-bold text-foreground">{proj.code}</span>
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Project Name</TableHead>
+                        <TableHead>Progress</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {projects.map((proj: any) => (
+                        <TableRow key={proj.id} className={!proj.active ? 'opacity-50' : ''}>
+                          <TableCell className="font-mono text-xs font-bold">{proj.code}</TableCell>
+                          <TableCell className="text-xs font-semibold">{proj.name}</TableCell>
+                          <TableCell className="text-xs font-bold text-emerald-600">{Number(proj.progress_percentage || 0)}%</TableCell>
+                          <TableCell>
+                            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
                               proj.priority === 'High' ? 'bg-rose-100 text-rose-800'
                               : proj.priority === 'Medium' ? 'bg-amber-100 text-amber-800'
                               : 'bg-slate-100 text-slate-800'
-                            }`}>{proj.priority || 'Medium'}</span>
-                          </div>
-                          <div className="text-sm font-semibold text-foreground mt-0.5">{proj.name}</div>
-                          <div className="text-xs font-bold text-emerald-600 mt-0.5">{Number(proj.progress_percentage || 0)}% complete</div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={() => handleEditProject(proj)} className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-secondary"><Edit2 className="size-3.5" /></button>
-                          <button onClick={() => handleDeleteRecord(proj.id, 'projects')} className="inline-flex size-8 items-center justify-center rounded-md border text-destructive hover:bg-rose-50"><Trash2 className="size-3.5" /></button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Desktop table */}
-                  <div className="hidden overflow-x-auto md:block">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Code</TableHead>
-                          <TableHead>Project Name</TableHead>
-                          <TableHead>Progress</TableHead>
-                          <TableHead>Priority</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
+                            }`}>
+                              {proj.priority || 'Medium'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => handleEditProject(proj)} className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-secondary"><Edit2 className="size-3.5" /></button>
+                              <button onClick={() => handleDeleteRecord(proj.id, 'projects')} className="inline-flex size-8 items-center justify-center rounded-md border text-destructive hover:bg-rose-50"><Trash2 className="size-3.5" /></button>
+                            </div>
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {projects.map((proj: any) => (
-                          <TableRow key={proj.id} className={!proj.active ? 'opacity-50' : ''}>
-                            <TableCell className="font-mono text-xs font-bold">{proj.code}</TableCell>
-                            <TableCell className="text-xs font-semibold">{proj.name}</TableCell>
-                            <TableCell className="text-xs font-bold text-emerald-600">{Number(proj.progress_percentage || 0)}%</TableCell>
-                            <TableCell>
-                              <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                                proj.priority === 'High' ? 'bg-rose-100 text-rose-800'
-                                : proj.priority === 'Medium' ? 'bg-amber-100 text-amber-800'
-                                : 'bg-slate-100 text-slate-800'
-                              }`}>
-                                {proj.priority || 'Medium'}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <button onClick={() => handleEditProject(proj)} className="inline-flex size-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-secondary"><Edit2 className="size-3.5" /></button>
-                                <button onClick={() => handleDeleteRecord(proj.id, 'projects')} className="inline-flex size-8 items-center justify-center rounded-md border text-destructive hover:bg-rose-50"><Trash2 className="size-3.5" /></button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       )}
-
+      */}
       {/* Tab 4: Registrar Administration */}
       {activeTab === 'registrar' && (
         <div className="flex flex-col gap-6">
@@ -2144,19 +2209,23 @@ export function ContractManagerWorkspace({
                 <form onSubmit={handleBondSubmit} className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="mb-emp" className="text-xs font-semibold">Employer Name *</Label>
-                    <Input id="mb-emp" placeholder="e.g. Bonga University" value={bondEmployer} onChange={(e) => setBondEmployer(e.target.value)} required />
+                    <Input id="mb-emp" list="unique-employers" placeholder="e.g. Bonga University" value={bondEmployer} onChange={(e) => setBondEmployer(e.target.value)} required />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="mb-proj" className="text-xs font-semibold">Project Name / Description *</Label>
-                    <Input id="mb-proj" placeholder="e.g. Teaching Hotel" value={bondProject} onChange={(e) => setBondProject(e.target.value)} required />
+                    <Input id="mb-proj" list="bond-projects-list" placeholder="e.g. Teaching Hotel" value={bondProject} onChange={(e) => setBondProject(e.target.value)} required />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="mb-cont" className="text-xs font-semibold">Contractor *</Label>
-                    <Input id="mb-cont" placeholder="Contractor Construction PLC" value={bondContractor} onChange={(e) => setBondContractor(e.target.value)} required />
+                    <Input id="mb-cont" list="bond-contractors-list" placeholder="Contractor Construction PLC" value={bondContractor} onChange={(e) => setBondContractor(e.target.value)} required />
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="space-y-2">
                     <Label htmlFor="mb-email" className="text-xs font-semibold">Email Notification Address</Label>
                     <Input id="mb-email" type="email" placeholder="Email to receive notifications (default: admin emails)" value={bondNotificationEmail} onChange={(e) => setBondNotificationEmail(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mb-email-opt" className="text-xs font-semibold text-muted-foreground">Additional Email Address (Optional)</Label>
+                    <Input id="mb-email-opt" type="email" placeholder="Secondary email for CC" value={bondOptionalEmail} onChange={(e) => setBondOptionalEmail(e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="mb-type" className="text-xs font-semibold">Bond Type *</Label>
@@ -2212,6 +2281,9 @@ export function ContractManagerWorkspace({
                     <p className="text-[11px] text-muted-foreground mt-0.5">Live active performance and payment guarantees</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className={`h-8 text-xs gap-1.5 ${showBondFilters ? 'bg-secondary' : ''}`} onClick={() => setShowBondFilters(!showBondFilters)}>
+                      <Filter className="size-3.5" /> Filter
+                    </Button>
                     <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => handleExportDownload('/api/registrar/export-bonds', 'Bonds_Report.xlsx')}>
                       <FileText className="size-3.5" /> Export Bonds Ledger
                     </Button>
@@ -2221,13 +2293,20 @@ export function ContractManagerWorkspace({
                   </div>
                 </div>
                 <div>
-                  {bonds.length === 0 ? (
-                    <div className="text-center text-xs text-muted-foreground py-16">No bonds registered yet.</div>
+                  {filteredBonds.length === 0 ? (
+                    <div className="text-center text-xs text-muted-foreground py-16">No bonds found or matching filters.</div>
                   ) : (
                     <>
+                      {showBondFilters && (
+                        <div className="flex flex-wrap gap-2 px-5 py-3 border-b border-border bg-secondary/10">
+                          <Input placeholder="Filter Client..." value={bondFilterEmployer} onChange={e => setBondFilterEmployer(e.target.value)} className="h-8 text-xs w-36" />
+                          <Input placeholder="Filter Project..." value={bondFilterProject} onChange={e => setBondFilterProject(e.target.value)} className="h-8 text-xs w-36" />
+                          <Input placeholder="Filter Contractor..." value={bondFilterContractor} onChange={e => setBondFilterContractor(e.target.value)} className="h-8 text-xs w-36" />
+                        </div>
+                      )}
                       {/* Mobile card view */}
                       <div className="flex flex-col divide-y divide-border md:hidden">
-                        {bonds.map((b: any) => {
+                        {filteredBonds.map((b: any) => {
                           const today = new Date()
                           const expiry = new Date(b.expiry_date)
                           const diff = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
@@ -2241,7 +2320,9 @@ export function ContractManagerWorkspace({
                                     <span className="text-xs font-bold text-foreground">{b.project_name}</span>
                                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${b.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : b.status === 'Expired' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'}`}>{b.status}</span>
                                   </div>
-                                  <div className="text-xs text-muted-foreground mt-0.5">{b.contractor_name} · {b.bond_type}</div>
+                                  <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground">Client: {b.employer_name}</div>
+                                  <div className="text-[11px] text-muted-foreground">Contractor: {b.contractor_name}</div>
+                                  <div className="text-xs text-muted-foreground mt-1">{b.bond_type}</div>
                                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
                                     <span className="font-mono font-semibold">{b.amount ? `${Number(b.amount).toLocaleString()} ETB` : '—'}</span>
                                     <span className="text-muted-foreground">Exp: {b.expiry_date}</span>
@@ -2253,7 +2334,7 @@ export function ContractManagerWorkspace({
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
-                                  <button onClick={() => { setEditId(b.id); setBondEmployer(b.employer_name); setBondProject(b.project_name); setBondContractor(b.contractor_name); setBondType(b.bond_type); setBondIssueDate(b.issue_date || ''); setBondExpiryDate(b.expiry_date); setBondAmount(b.amount?.toString() || ''); setBondStatus(b.status); setBondNotificationEmail(b.assigned_manager_email || '') }} className="inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground hover:text-primary hover:bg-primary/5" title="Edit"><Edit2 className="size-3.5" /></button>
+                                  <button onClick={() => { setEditId(b.id); setBondEmployer(b.employer_name); setBondProject(b.project_name); setBondContractor(b.contractor_name); setBondType(b.bond_type); setBondIssueDate(b.issue_date || ''); setBondExpiryDate(b.expiry_date); setBondAmount(b.amount?.toString() || ''); setBondStatus(b.status); const emails = (b.assigned_manager_email || '').split(','); setBondNotificationEmail(emails[0] ? emails[0].trim() : ''); setBondOptionalEmail(emails[1] ? emails[1].trim() : '') }} className="inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground hover:text-primary hover:bg-primary/5" title="Edit"><Edit2 className="size-3.5" /></button>
                                   <button onClick={() => handleDeleteRecord(b.id, 'bonds')} className="inline-flex size-7 items-center justify-center rounded-md border text-destructive hover:bg-rose-50" title="Delete"><Trash2 className="size-3.5" /></button>
                                 </div>
                               </div>
@@ -2276,7 +2357,7 @@ export function ContractManagerWorkspace({
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {bonds.map((b: any) => {
+                            {filteredBonds.map((b: any) => {
                               const today = new Date()
                               const expiry = new Date(b.expiry_date)
                               const diff = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
@@ -2286,6 +2367,7 @@ export function ContractManagerWorkspace({
                                 <TableRow key={b.id}>
                                   <TableCell>
                                     <div className="font-bold text-xs text-foreground">{b.project_name}</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground">Client: {b.employer_name}</div>
                                     <div className="text-[11px] text-muted-foreground">Contractor: {b.contractor_name}</div>
                                   </TableCell>
                                   <TableCell className="text-xs">{b.bond_type}</TableCell>
@@ -2303,7 +2385,7 @@ export function ContractManagerWorkspace({
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1.5">
-                                      <button onClick={() => { setEditId(b.id); setBondEmployer(b.employer_name); setBondProject(b.project_name); setBondContractor(b.contractor_name); setBondType(b.bond_type); setBondIssueDate(b.issue_date || ''); setBondExpiryDate(b.expiry_date); setBondAmount(b.amount?.toString() || ''); setBondStatus(b.status); setBondNotificationEmail(b.assigned_manager_email || '') }} className="inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground hover:text-primary hover:bg-primary/5" title="Edit"><Edit2 className="size-3.5" /></button>
+                                      <button onClick={() => { setEditId(b.id); setBondEmployer(b.employer_name); setBondProject(b.project_name); setBondContractor(b.contractor_name); setBondType(b.bond_type); setBondIssueDate(b.issue_date || ''); setBondExpiryDate(b.expiry_date); setBondAmount(b.amount?.toString() || ''); setBondStatus(b.status); const emails = (b.assigned_manager_email || '').split(','); setBondNotificationEmail(emails[0] ? emails[0].trim() : ''); setBondOptionalEmail(emails[1] ? emails[1].trim() : '') }} className="inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground hover:text-primary hover:bg-primary/5" title="Edit"><Edit2 className="size-3.5" /></button>
                                       <button onClick={() => handleDeleteRecord(b.id, 'bonds')} className="inline-flex size-7 items-center justify-center rounded-md border text-destructive hover:bg-rose-50" title="Delete"><Trash2 className="size-3.5" /></button>
                                     </div>
                                   </TableCell>
@@ -2335,19 +2417,23 @@ export function ContractManagerWorkspace({
                 <form onSubmit={handleEotSubmit} className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="me-client" className="text-xs font-semibold">Client / Employer *</Label>
-                    <Input id="me-client" placeholder="e.g. Ministry of Education" value={eotClient} onChange={(e) => setEotClient(e.target.value)} required />
+                    <Input id="me-client" list="unique-employers" placeholder="e.g. Ministry of Education" value={eotClient} onChange={(e) => setEotClient(e.target.value)} required />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="me-proj" className="text-xs font-semibold">Project Name *</Label>
-                    <Input id="me-proj" placeholder="Project title" value={eotProject} onChange={(e) => setEotProject(e.target.value)} required />
+                    <Input id="me-proj" list="eot-projects-list" placeholder="Project title" value={eotProject} onChange={(e) => setEotProject(e.target.value)} required />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="me-cont" className="text-xs font-semibold">Contractor *</Label>
-                    <Input id="me-cont" placeholder="e.g. Abiy Construction" value={eotContractor} onChange={(e) => setEotContractor(e.target.value)} required />
+                    <Input id="me-cont" list="eot-contractors-list" placeholder="e.g. Abiy Construction" value={eotContractor} onChange={(e) => setEotContractor(e.target.value)} required />
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="space-y-2">
                     <Label htmlFor="me-email" className="text-xs font-semibold">Email Notification Address</Label>
                     <Input id="me-email" type="email" placeholder="Email to receive notifications (default: admin emails)" value={eotNotificationEmail} onChange={(e) => setEotNotificationEmail(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="me-email-opt" className="text-xs font-semibold text-muted-foreground">Additional Email Address (Optional)</Label>
+                    <Input id="me-email-opt" type="email" placeholder="Secondary email for CC" value={eotOptionalEmail} onChange={(e) => setEotOptionalEmail(e.target.value)} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="flex flex-col gap-1">
@@ -2406,6 +2492,9 @@ export function ContractManagerWorkspace({
                     <p className="text-[11px] text-muted-foreground mt-0.5">Live approved Extension of Time metrics</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className={`h-8 text-xs gap-1.5 ${showEotFilters ? 'bg-secondary' : ''}`} onClick={() => setShowEotFilters(!showEotFilters)}>
+                      <Filter className="size-3.5" /> Filter
+                    </Button>
                     <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => handleExportDownload('/api/registrar/export-eot', 'EOT_Report.xlsx')}>
                       <FileText className="size-3.5" /> Export EOT Log
                     </Button>
@@ -2415,13 +2504,20 @@ export function ContractManagerWorkspace({
                   </div>
                 </div>
                 <div>
-                  {eots.length === 0 ? (
-                    <div className="text-center text-xs text-muted-foreground py-16">No EOT entries yet.</div>
+                  {filteredEots.length === 0 ? (
+                    <div className="text-center text-xs text-muted-foreground py-16">No EOT entries found or matching filters.</div>
                   ) : (
                     <>
+                      {showEotFilters && (
+                        <div className="flex flex-wrap gap-2 px-5 py-3 border-b border-border bg-secondary/10">
+                          <Input placeholder="Filter Client..." value={eotFilterEmployer} onChange={e => setEotFilterEmployer(e.target.value)} className="h-8 text-xs w-36" />
+                          <Input placeholder="Filter Project..." value={eotFilterProject} onChange={e => setEotFilterProject(e.target.value)} className="h-8 text-xs w-36" />
+                          <Input placeholder="Filter Contractor..." value={eotFilterContractor} onChange={e => setEotFilterContractor(e.target.value)} className="h-8 text-xs w-36" />
+                        </div>
+                      )}
                       {/* Mobile card view */}
                       <div className="flex flex-col divide-y divide-border md:hidden">
-                        {eots.map((e: any) => {
+                        {filteredEots.map((e: any) => {
                           const today = new Date()
                           const compDate = new Date(e.revised_completion_date)
                           const diff = Math.ceil((compDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
@@ -2437,7 +2533,8 @@ export function ContractManagerWorkspace({
                                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${statusClass}`}>{e.status}</span>
                                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${alertClass}`}>{alertLabel}</span>
                                   </div>
-                                  <div className="text-xs text-muted-foreground mt-0.5">{e.contractor_name}</div>
+                                  <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground">Client: {e.client_name}</div>
+                                  <div className="text-[11px] text-muted-foreground">Contractor: {e.contractor_name}</div>
                                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
                                     <span className="text-muted-foreground">EOT #{e.eot_number}</span>
                                     <span className="font-semibold text-foreground">{e.days_approved} days approved</span>
@@ -2445,7 +2542,7 @@ export function ContractManagerWorkspace({
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
-                                  <button onClick={() => { setEditId(e.id); setEotClient(e.client_name); setEotProject(e.project_name); setEotContractor(e.contractor_name); setEotNum(e.eot_number?.toString() || '1'); setEotDays(e.days_approved?.toString() || '0'); setEotRevDate(e.revised_completion_date); setEotStatus(e.status); setEotReason(e.reason_for_eot || ''); setEotNotificationEmail(e.assigned_manager_email || '') }} className="inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground hover:text-primary hover:bg-primary/5" title="Edit"><Edit2 className="size-3.5" /></button>
+                                  <button onClick={() => { setEditId(e.id); setEotClient(e.client_name); setEotProject(e.project_name); setEotContractor(e.contractor_name); setEotNum(e.eot_number?.toString() || '1'); setEotDays(e.days_approved?.toString() || '0'); setEotRevDate(e.revised_completion_date); setEotStatus(e.status); setEotReason(e.reason_for_eot || ''); const emails = (e.assigned_manager_email || '').split(','); setEotNotificationEmail(emails[0] ? emails[0].trim() : ''); setEotOptionalEmail(emails[1] ? emails[1].trim() : '') }} className="inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground hover:text-primary hover:bg-primary/5" title="Edit"><Edit2 className="size-3.5" /></button>
                                   <button onClick={() => handleDeleteRecord(e.id, 'eot')} className="inline-flex size-7 items-center justify-center rounded-md border text-destructive hover:bg-rose-50" title="Delete"><Trash2 className="size-3.5" /></button>
                                 </div>
                               </div>
@@ -2468,7 +2565,7 @@ export function ContractManagerWorkspace({
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {eots.map((e: any) => {
+                            {filteredEots.map((e: any) => {
                               const today = new Date()
                               const compDate = new Date(e.revised_completion_date)
                               const diff = Math.ceil((compDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
@@ -2478,6 +2575,7 @@ export function ContractManagerWorkspace({
                                 <TableRow key={e.id}>
                                   <TableCell>
                                     <div className="font-bold text-xs text-foreground">{e.project_name}</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground">Client: {e.client_name}</div>
                                     <div className="text-[11px] text-muted-foreground">Contractor: {e.contractor_name}</div>
                                   </TableCell>
                                   <TableCell className="text-center text-xs font-bold">{e.eot_number}</TableCell>
@@ -2489,7 +2587,7 @@ export function ContractManagerWorkspace({
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1.5">
-                                      <button onClick={() => { setEditId(e.id); setEotClient(e.client_name); setEotProject(e.project_name); setEotContractor(e.contractor_name); setEotNum(e.eot_number?.toString() || '1'); setEotDays(e.days_approved?.toString() || '0'); setEotRevDate(e.revised_completion_date); setEotStatus(e.status); setEotReason(e.reason_for_eot || ''); setEotNotificationEmail(e.assigned_manager_email || '') }} className="inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground hover:text-primary hover:bg-primary/5" title="Edit"><Edit2 className="size-3.5" /></button>
+                                      <button onClick={() => { setEditId(e.id); setEotClient(e.client_name); setEotProject(e.project_name); setEotContractor(e.contractor_name); setEotNum(e.eot_number?.toString() || '1'); setEotDays(e.days_approved?.toString() || '0'); setEotRevDate(e.revised_completion_date); setEotStatus(e.status); setEotReason(e.reason_for_eot || ''); const emails = (e.assigned_manager_email || '').split(','); setEotNotificationEmail(emails[0] ? emails[0].trim() : ''); setEotOptionalEmail(emails[1] ? emails[1].trim() : '') }} className="inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground hover:text-primary hover:bg-primary/5" title="Edit"><Edit2 className="size-3.5" /></button>
                                       <button onClick={() => handleDeleteRecord(e.id, 'eot')} className="inline-flex size-7 items-center justify-center rounded-md border text-destructive hover:bg-rose-50" title="Delete"><Trash2 className="size-3.5" /></button>
                                     </div>
                                   </TableCell>
@@ -2895,8 +2993,77 @@ export function ContractManagerWorkspace({
                     <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400" style={{ width: `${bondStats.active > 0 ? (bondStats.bandSafe / bondStats.active) * 100 : 0}%` }} />
                   </div>
                 </div>
+
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-flex size-2.5 rounded-full bg-emerald-500" />
+                      <span className="text-muted-foreground">Outstanding: <strong className="text-foreground">{evalStats.outstanding}</strong></span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-flex size-2.5 rounded-full bg-blue-500" />
+                      <span className="text-muted-foreground">Very Good: <strong className="text-foreground">{evalStats.veryGood}</strong></span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-flex size-2.5 rounded-full bg-amber-500" />
+                      <span className="text-muted-foreground">Good: <strong className="text-foreground">{evalStats.good}</strong></span>
+                    </span>
+                  </div>
+                </div>
               </CardContent>
             </Card>
+
+            {/* Project Progress 
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <FolderKanban className="size-4.5 text-primary" />
+                  Project Portfolio Status
+                </CardTitle>
+                <CardDescription>Active projects and completion metrics</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div className="rounded-lg border border-border bg-emerald-50 dark:bg-emerald-950/20 p-3 text-center">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">Active</span>
+                    <span className="text-2xl font-bold text-emerald-600">{projectStats.active}</span>
+                  </div>
+                  <div className="rounded-lg border border-border bg-amber-50 dark:bg-amber-950/20 p-3 text-center">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">On Hold</span>
+                    <span className="text-2xl font-bold text-amber-600">{projectStats.onHold}</span>
+                  </div>
+                  <div className="rounded-lg border border-border bg-blue-50 dark:bg-blue-950/20 p-3 text-center">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">Completed</span>
+                    <span className="text-2xl font-bold text-blue-600">{projectStats.completed}</span>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-border">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-foreground">Average Project Progress</span>
+                    <span className="text-lg font-bold text-primary">{projectStats.avgProgress}%</span>
+                  </div>
+                  <div className="h-4 w-full overflow-hidden rounded-full bg-secondary">
+                    <div className="h-full bg-gradient-to-r from-primary to-primary/80" style={{ width: `${projectStats.avgProgress}%` }} />
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-border space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-foreground">Total Projects</span>
+                    <span className="font-bold text-foreground">{projectStats.total}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-foreground flex items-center gap-1.5">
+                      <AlertTriangle className="size-3.5 text-rose-500" />
+                      High Priority
+                    </span>
+                    <span className="font-bold text-rose-600">{projectStats.highPriority}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            */}
           </div>
 
           {/* Row 2: EOT & Correspondence */}
@@ -3041,7 +3208,7 @@ export function ContractManagerWorkspace({
               </CardContent>
             </Card>
 
-            {/* Project Progress */}
+            {/* Project Progress 
             <Card className="shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -3091,6 +3258,7 @@ export function ContractManagerWorkspace({
                 </div>
               </CardContent>
             </Card>
+            */}
           </div>
 
           {/* Row 4: Timesheets */}

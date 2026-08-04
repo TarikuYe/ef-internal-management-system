@@ -19,6 +19,9 @@ import {
   Trash2,
   CheckCircle,
   AlertTriangle,
+  Download,
+  Search,
+  Filter,
   Clock,
   Sparkles,
   Lock,
@@ -640,6 +643,17 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
   const [bondAmount, setBondAmount] = useState('')
   const [bondStatus, setBondStatus] = useState<'Active' | 'Expired' | 'Released'>('Active')
   const [bondNotificationEmail, setBondNotificationEmail] = useState('')
+  const [bondOptionalEmail, setBondOptionalEmail] = useState('')
+
+  // Multi-contractor hierarchy & filtering states
+  const [bondFilterEmployer, setBondFilterEmployer] = useState('')
+  const [bondFilterProject, setBondFilterProject] = useState('')
+  const [bondFilterContractor, setBondFilterContractor] = useState('')
+  const [eotFilterEmployer, setEotFilterEmployer] = useState('')
+  const [eotFilterProject, setEotFilterProject] = useState('')
+  const [eotFilterContractor, setEotFilterContractor] = useState('')
+  const [showBondFilters, setShowBondFilters] = useState(false)
+  const [showEotFilters, setShowEotFilters] = useState(false)
 
   const handleBondSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -653,7 +667,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
       expiry_date: bondExpiryDate,
       amount: bondAmount ? parseFloat(bondAmount) : null,
       status: bondStatus,
-      assigned_manager_email: bondNotificationEmail || 'team@efae.com'
+      assigned_manager_email: [bondNotificationEmail, bondOptionalEmail].filter(Boolean).join(',') || 'team@efae.com'
     }
     if (editId) payload.id = editId
 
@@ -684,6 +698,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
     setBondAmount('')
     setBondStatus('Active')
     setBondNotificationEmail('')
+    setBondOptionalEmail('')
   }
 
   // 3. EOT Form State
@@ -696,6 +711,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
   const [eotStatus, setEotStatus] = useState<'Approved' | 'Rejected' | 'Pending' | 'Under Review'>('Pending')
   const [eotReason, setEotReason] = useState('')
   const [eotNotificationEmail, setEotNotificationEmail] = useState('')
+  const [eotOptionalEmail, setEotOptionalEmail] = useState('')
 
   const handleEotSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -709,7 +725,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
       revised_completion_date: eotRevDate,
       status: eotStatus,
       reason_for_eot: eotReason,
-      assigned_manager_email: eotNotificationEmail || 'team@efae.com'
+      assigned_manager_email: [eotNotificationEmail, eotOptionalEmail].filter(Boolean).join(',') || 'team@efae.com'
     }
     if (editId) payload.id = editId
 
@@ -740,6 +756,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
     setEotStatus('Pending')
     setEotReason('')
     setEotNotificationEmail('')
+    setEotOptionalEmail('')
   }
 
   // Password reset setting
@@ -811,7 +828,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
   }
 
   // Dashboard Stats Calculations
-  const timesheetPendingCount = localRows.filter(r => r.approval_status === 'Pending').length
+  const timesheetPendingCount = localRows.filter(r => r.approval_status === 'Pending' && !r.isNew).length
   const timesheetApprovedHours = localRows
     .filter(r => r.approval_status === 'Approved')
     .reduce((sum, r) => sum + r.hours_worked, 0)
@@ -845,8 +862,82 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
     return list.slice(0, 5)
   }, [localRows, eots])
 
+  const uniqueEmployers = useMemo(() => {
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.employer_name) list.add(b.employer_name) })
+    eots.forEach((e: any) => { if (e.client_name) list.add(e.client_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots])
+
+  const bondProjectsList = useMemo(() => {
+    if (!bondEmployer) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.employer_name === bondEmployer && b.project_name) list.add(b.project_name) })
+    eots.forEach((e: any) => { if (e.client_name === bondEmployer && e.project_name) list.add(e.project_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, bondEmployer])
+
+  const bondContractorsList = useMemo(() => {
+    if (!bondProject) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.project_name === bondProject && b.contractor_name) list.add(b.contractor_name) })
+    eots.forEach((e: any) => { if (e.project_name === bondProject && e.contractor_name) list.add(e.contractor_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, bondProject])
+  
+  const eotProjectsList = useMemo(() => {
+    if (!eotClient) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.employer_name === eotClient && b.project_name) list.add(b.project_name) })
+    eots.forEach((e: any) => { if (e.client_name === eotClient && e.project_name) list.add(e.project_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, eotClient])
+
+  const eotContractorsList = useMemo(() => {
+    if (!eotProject) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.project_name === eotProject && b.contractor_name) list.add(b.contractor_name) })
+    eots.forEach((e: any) => { if (e.project_name === eotProject && e.contractor_name) list.add(e.contractor_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, eotProject])
+
+  const filteredBonds = useMemo(() => {
+    return bonds.filter((b: any) => {
+      const matchEmp = !bondFilterEmployer || (b.employer_name || '').toLowerCase().includes(bondFilterEmployer.toLowerCase())
+      const matchProj = !bondFilterProject || (b.project_name || '').toLowerCase().includes(bondFilterProject.toLowerCase())
+      const matchCont = !bondFilterContractor || (b.contractor_name || '').toLowerCase().includes(bondFilterContractor.toLowerCase())
+      return matchEmp && matchProj && matchCont
+    })
+  }, [bonds, bondFilterEmployer, bondFilterProject, bondFilterContractor])
+
+  const filteredEots = useMemo(() => {
+    return eots.filter((e: any) => {
+      const matchEmp = !eotFilterEmployer || (e.client_name || '').toLowerCase().includes(eotFilterEmployer.toLowerCase())
+      const matchProj = !eotFilterProject || (e.project_name || '').toLowerCase().includes(eotFilterProject.toLowerCase())
+      const matchCont = !eotFilterContractor || (e.contractor_name || '').toLowerCase().includes(eotFilterContractor.toLowerCase())
+      return matchEmp && matchProj && matchCont
+    })
+  }, [eots, eotFilterEmployer, eotFilterProject, eotFilterContractor])
+
   return (
     <div className="flex flex-col gap-6">
+      {/* Hidden Datalists for Combobox behavior */}
+      <datalist id="unique-employers">
+        {uniqueEmployers.map(emp => <option key={emp} value={emp} />)}
+      </datalist>
+      <datalist id="bond-projects-list">
+        {bondProjectsList.map(p => <option key={p} value={p} />)}
+      </datalist>
+      <datalist id="bond-contractors-list">
+        {bondContractorsList.map(c => <option key={c} value={c} />)}
+      </datalist>
+      <datalist id="eot-projects-list">
+        {eotProjectsList.map(p => <option key={p} value={p} />)}
+      </datalist>
+      <datalist id="eot-contractors-list">
+        {eotContractorsList.map(c => <option key={c} value={c} />)}
+      </datalist>
+
       {/* Premium Header Profile Block */}
       <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-r from-primary/10 via-background to-background p-4 sm:p-6 shadow-sm">
         <div className="absolute right-0 top-0 translate-x-1/3 -translate-y-1/3 size-36 rounded-full bg-primary/5 blur-2xl pointer-events-none" />
@@ -854,7 +945,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <div className="flex size-10 sm:size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-                <Sparkles className="size-5 sm:size-6 text-accent" />
+                <Briefcase className="size-5 sm:size-6 text-accent" />
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -896,6 +987,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                 <Clock3 className="size-4" />
                 <span>Timesheet</span>
               </button>
+              {/*
               <button
                 onClick={() => setActiveTab('projects')}
                 className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 sm:px-3 py-2 text-xs font-semibold transition-all ${
@@ -905,6 +997,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                 <FolderKanban className="size-4" />
                 <span>Projects</span>
               </button>
+              */}
               <button
                 onClick={() => setActiveTab('registrar')}
                 className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 sm:px-3 py-2 text-xs font-semibold transition-all ${
@@ -959,6 +1052,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
               </CardContent>
             </Card>
 
+            {/*
             <Card className="hover:shadow-md transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-xs font-bold text-muted-foreground uppercase">
@@ -973,6 +1067,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                 </p>
               </CardContent>
             </Card>
+            */}
 
             <Card className="hover:shadow-md transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -1039,16 +1134,18 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                   <Calendar className="size-4" />
                   Submit EOT Request
                 </Button>
+                {/*
                 <Button onClick={() => setActiveTab('projects')} variant="outline" className="w-full justify-start text-xs font-semibold h-10 gap-2">
                   <FolderKanban className="size-4" />
                   Update Project Progress
                 </Button>
+                */}
               </CardContent>
             </Card>
 
             {/* Dashboard Widgets List */}
             <div className="md:col-span-2 flex flex-col gap-6">
-              {/* Assigned Projects Widget */}
+              {/* Assigned Projects Widget 
               <Card className="shadow-sm">
                 <CardHeader>
                   <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -1095,6 +1192,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                   )}
                 </CardContent>
               </Card>
+              */}
 
               {/* Recent Correspondence and Manager Comments */}
               <Card className="shadow-sm">
@@ -1414,7 +1512,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
         </div>
       )}
 
-      {/* Tab 3: Update Assigned Projects */}
+      {/* Tab 3: Update Assigned Projects 
       {activeTab === 'projects' && (
         <div className="grid gap-6 md:grid-cols-3">
           <Card className="md:col-span-1 shadow-sm">
@@ -1523,6 +1621,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
           </Card>
         </div>
       )}
+      */}
 
       {/* Tab 4: Registrar module */}
       {activeTab === 'registrar' && (
@@ -1759,19 +1858,23 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                 <form onSubmit={handleBondSubmit} className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="b-emp" className="text-xs font-semibold">Employer Name *</Label>
-                    <Input id="b-emp" placeholder="e.g. Bonga University" value={bondEmployer} onChange={(e) => setBondEmployer(e.target.value)} required />
+                    <Input id="b-emp" list="unique-employers" placeholder="e.g. Bonga University" value={bondEmployer} onChange={(e) => setBondEmployer(e.target.value)} required />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="b-proj" className="text-xs font-semibold">Project Name / Description *</Label>
-                    <Input id="b-proj" placeholder="e.g. Teaching Hotel" value={bondProject} onChange={(e) => setBondProject(e.target.value)} required />
+                    <Input id="b-proj" list="bond-projects-list" placeholder="e.g. Teaching Hotel" value={bondProject} onChange={(e) => setBondProject(e.target.value)} required />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="b-cont" className="text-xs font-semibold">Contractor *</Label>
-                    <Input id="b-cont" placeholder="Contractor Construction PLC" value={bondContractor} onChange={(e) => setBondContractor(e.target.value)} required />
+                    <Input id="b-cont" list="bond-contractors-list" placeholder="Contractor Construction PLC" value={bondContractor} onChange={(e) => setBondContractor(e.target.value)} required />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="b-email" className="text-xs font-semibold">Email Notification Address</Label>
                     <Input id="b-email" type="email" placeholder="Email to receive notifications (default: admin emails)" value={bondNotificationEmail} onChange={(e) => setBondNotificationEmail(e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="b-email-opt" className="text-xs font-semibold text-muted-foreground">Additional Email Address (Optional)</Label>
+                    <Input id="b-email-opt" type="email" placeholder="Secondary email for CC" value={bondOptionalEmail} onChange={(e) => setBondOptionalEmail(e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="b-type" className="text-xs font-semibold">Bond Type *</Label>
@@ -1827,6 +1930,9 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                     <p className="text-[11px] text-muted-foreground mt-0.5">Live active performance and payment guarantees</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className={`h-8 text-xs gap-1.5 ${showBondFilters ? 'bg-secondary' : ''}`} onClick={() => setShowBondFilters(!showBondFilters)}>
+                      <Filter className="size-3.5" /> Filter
+                    </Button>
                     <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => handleExportDownload('/api/registrar/export-bonds', 'Bonds_Report.xlsx')}>
                       <FileText className="size-3.5" /> Export Bonds Ledger
                     </Button>
@@ -1835,11 +1941,20 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                     </button>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  {bonds.length === 0 ? (
-                    <div className="text-center text-xs text-muted-foreground py-16">No bonds registered yet.</div>
+                <div>
+                  {filteredBonds.length === 0 ? (
+                    <div className="text-center text-xs text-muted-foreground py-16">No bonds found or matching filters.</div>
                   ) : (
-                    <Table>
+                    <>
+                      {showBondFilters && (
+                        <div className="flex flex-wrap gap-2 px-5 py-3 border-b border-border bg-secondary/10">
+                          <Input placeholder="Filter Client..." value={bondFilterEmployer} onChange={e => setBondFilterEmployer(e.target.value)} className="h-8 text-xs w-36" />
+                          <Input placeholder="Filter Project..." value={bondFilterProject} onChange={e => setBondFilterProject(e.target.value)} className="h-8 text-xs w-36" />
+                          <Input placeholder="Filter Contractor..." value={bondFilterContractor} onChange={e => setBondFilterContractor(e.target.value)} className="h-8 text-xs w-36" />
+                        </div>
+                      )}
+                      <div className="overflow-x-auto">
+                        <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Project / Contractor</TableHead>
@@ -1852,7 +1967,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {bonds.map((b: any) => {
+                        {filteredBonds.map((b: any) => {
                           const today = new Date()
                           const expiry = new Date(b.expiry_date)
                           const diff = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
@@ -1862,6 +1977,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                             <TableRow key={b.id}>
                               <TableCell>
                                 <div className="font-bold text-xs text-foreground">{b.project_name}</div>
+                                <div className="text-[11px] text-muted-foreground font-semibold">Client: {b.employer_name}</div>
                                 <div className="text-[11px] text-muted-foreground">Contractor: {b.contractor_name}</div>
                               </TableCell>
                               <TableCell className="text-xs">{b.bond_type}</TableCell>
@@ -1893,7 +2009,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                                       setBondContractor(b.contractor_name); setBondType(b.bond_type)
                                       setBondIssueDate(b.issue_date || ''); setBondExpiryDate(b.expiry_date)
                                       setBondAmount(b.amount?.toString() || ''); setBondStatus(b.status)
-                                      setBondNotificationEmail(b.assigned_manager_email || '')
+                                      const emails = (b.assigned_manager_email || '').split(','); setBondNotificationEmail(emails[0] ? emails[0].trim() : ''); setBondOptionalEmail(emails[1] ? emails[1].trim() : '')
                                     }}
                                     className="inline-flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
                                     title="Edit"
@@ -1907,6 +2023,8 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                         })}
                       </TableBody>
                     </Table>
+                  </div>
+                  </>
                   )}
                 </div>
               </div>
@@ -1928,19 +2046,23 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                 <form onSubmit={handleEotSubmit} className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="e-client" className="text-xs font-semibold">Client / Employer *</Label>
-                    <Input id="e-client" placeholder="e.g. Ministry of Education" value={eotClient} onChange={(e) => setEotClient(e.target.value)} required />
+                    <Input id="e-client" list="unique-employers" placeholder="e.g. Ministry of Education" value={eotClient} onChange={(e) => setEotClient(e.target.value)} required />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="e-proj" className="text-xs font-semibold">Project Name *</Label>
-                    <Input id="e-proj" placeholder="Project title" value={eotProject} onChange={(e) => setEotProject(e.target.value)} required />
+                    <Input id="e-proj" list="eot-projects-list" placeholder="Project title" value={eotProject} onChange={(e) => setEotProject(e.target.value)} required />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="e-cont" className="text-xs font-semibold">Contractor *</Label>
-                    <Input id="e-cont" placeholder="e.g. Abiy Construction" value={eotContractor} onChange={(e) => setEotContractor(e.target.value)} required />
+                    <Input id="e-cont" list="eot-contractors-list" placeholder="e.g. Abiy Construction" value={eotContractor} onChange={(e) => setEotContractor(e.target.value)} required />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="e-email" className="text-xs font-semibold">Email Notification Address</Label>
                     <Input id="e-email" type="email" placeholder="Email to receive notifications (default: admin emails)" value={eotNotificationEmail} onChange={(e) => setEotNotificationEmail(e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor="e-email-opt" className="text-xs font-semibold text-muted-foreground">Additional Email Address (Optional)</Label>
+                    <Input id="e-email-opt" type="email" placeholder="Secondary email for CC" value={eotOptionalEmail} onChange={(e) => setEotOptionalEmail(e.target.value)} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="flex flex-col gap-1">
@@ -1999,6 +2121,9 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                     <p className="text-[11px] text-muted-foreground mt-0.5">Live approved Extension of Time metrics</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className={`h-8 text-xs gap-1.5 ${showEotFilters ? 'bg-secondary' : ''}`} onClick={() => setShowEotFilters(!showEotFilters)}>
+                      <Filter className="size-3.5" /> Filter
+                    </Button>
                     <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => handleExportDownload('/api/registrar/export-eot', 'EOT_Report.xlsx')}>
                       <FileText className="size-3.5" /> Export EOT Log
                     </Button>
@@ -2007,11 +2132,20 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                     </button>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  {eots.length === 0 ? (
-                    <div className="text-center text-xs text-muted-foreground py-16">No EOT entries yet.</div>
+                <div>
+                  {filteredEots.length === 0 ? (
+                    <div className="text-center text-xs text-muted-foreground py-16">No EOT entries found or matching filters.</div>
                   ) : (
-                    <Table>
+                    <>
+                      {showEotFilters && (
+                        <div className="flex flex-wrap gap-2 px-5 py-3 border-b border-border bg-secondary/10">
+                          <Input placeholder="Filter Client..." value={eotFilterEmployer} onChange={e => setEotFilterEmployer(e.target.value)} className="h-8 text-xs w-36" />
+                          <Input placeholder="Filter Project..." value={eotFilterProject} onChange={e => setEotFilterProject(e.target.value)} className="h-8 text-xs w-36" />
+                          <Input placeholder="Filter Contractor..." value={eotFilterContractor} onChange={e => setEotFilterContractor(e.target.value)} className="h-8 text-xs w-36" />
+                        </div>
+                      )}
+                      <div className="overflow-x-auto">
+                        <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Project / Contractor</TableHead>
@@ -2024,7 +2158,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {eots.map((e: any) => {
+                        {filteredEots.map((e: any) => {
                           const today = new Date()
                           const compDate = new Date(e.revised_completion_date)
                           const diff = Math.ceil((compDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
@@ -2037,6 +2171,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                             <TableRow key={e.id}>
                               <TableCell>
                                 <div className="font-bold text-xs text-foreground">{e.project_name}</div>
+                                <div className="text-[11px] text-muted-foreground font-semibold">Client: {e.client_name}</div>
                                 <div className="text-[11px] text-muted-foreground">Contractor: {e.contractor_name}</div>
                               </TableCell>
                               <TableCell className="text-center text-xs font-bold">{e.eot_number}</TableCell>
@@ -2063,7 +2198,7 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                                       setEotContractor(e.contractor_name); setEotNum(e.eot_number?.toString() || '1')
                                       setEotDays(e.days_approved?.toString() || '0'); setEotRevDate(e.revised_completion_date)
                                       setEotStatus(e.status); setEotReason(e.reason_for_eot || '')
-                                      setEotNotificationEmail(e.assigned_manager_email || '')
+                                      const emails = (e.assigned_manager_email || '').split(','); setEotNotificationEmail(emails[0] ? emails[0].trim() : ''); setEotOptionalEmail(emails[1] ? emails[1].trim() : '')
                                     }}
                                     className="inline-flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
                                     title="Edit"
@@ -2077,6 +2212,8 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                         })}
                       </TableBody>
                     </Table>
+                  </div>
+                  </>
                   )}
                 </div>
               </div>

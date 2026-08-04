@@ -132,8 +132,13 @@ export async function POST(request: Request) {
       
       // Use the stored assigned manager email - always send to this email
       const storedEmail = data.assigned_manager_email
-      if (storedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(storedEmail)) {
-        recipients.push(storedEmail)
+      if (storedEmail) {
+        const emails = storedEmail.split(',').map((e: string) => e.trim()).filter(Boolean)
+        emails.forEach((email: string) => {
+          if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            recipients.push(email)
+          }
+        })
       }
       
       if (recipients.length > 0) {

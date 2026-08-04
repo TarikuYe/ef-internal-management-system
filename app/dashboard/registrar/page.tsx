@@ -39,6 +39,7 @@ import {
   FileSpreadsheet,
   BookMarked,
   AlertTriangle,
+  Filter,
 } from 'lucide-react'
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -263,6 +264,16 @@ function RegistrarPageInner() {
   const [bondAmount, setBondAmount] = useState('')
   const [bondStatus, setBondStatus] = useState<'Active' | 'Expired' | 'Released'>('Active')
   const [bondNotificationEmail, setBondNotificationEmail] = useState('')
+
+  // Multi-contractor hierarchy & filtering states
+  const [bondFilterEmployer, setBondFilterEmployer] = useState('')
+  const [bondFilterProject, setBondFilterProject] = useState('')
+  const [bondFilterContractor, setBondFilterContractor] = useState('')
+  const [eotFilterEmployer, setEotFilterEmployer] = useState('')
+  const [eotFilterProject, setEotFilterProject] = useState('')
+  const [eotFilterContractor, setEotFilterContractor] = useState('')
+  const [showBondFilters, setShowBondFilters] = useState(false)
+  const [showEotFilters, setShowEotFilters] = useState(false)
 
   const handleBondSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -654,8 +665,81 @@ function RegistrarPageInner() {
 
   const ActiveTabIcon = TAB_META[activeTab].icon
 
+  const uniqueEmployers = useMemo(() => {
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.employer_name) list.add(b.employer_name) })
+    eots.forEach((e: any) => { if (e.client_name) list.add(e.client_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots])
+
+  const bondProjectsList = useMemo(() => {
+    if (!bondEmployer) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.employer_name === bondEmployer && b.project_name) list.add(b.project_name) })
+    eots.forEach((e: any) => { if (e.client_name === bondEmployer && e.project_name) list.add(e.project_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, bondEmployer])
+
+  const bondContractorsList = useMemo(() => {
+    if (!bondProject) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.project_name === bondProject && b.contractor_name) list.add(b.contractor_name) })
+    eots.forEach((e: any) => { if (e.project_name === bondProject && e.contractor_name) list.add(e.contractor_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, bondProject])
+  
+  const eotProjectsList = useMemo(() => {
+    if (!eotClient) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.employer_name === eotClient && b.project_name) list.add(b.project_name) })
+    eots.forEach((e: any) => { if (e.client_name === eotClient && e.project_name) list.add(e.project_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, eotClient])
+
+  const eotContractorsList = useMemo(() => {
+    if (!eotProject) return []
+    const list = new Set<string>()
+    bonds.forEach((b: any) => { if (b.project_name === eotProject && b.contractor_name) list.add(b.contractor_name) })
+    eots.forEach((e: any) => { if (e.project_name === eotProject && e.contractor_name) list.add(e.contractor_name) })
+    return Array.from(list).sort()
+  }, [bonds, eots, eotProject])
+
+  const filteredBonds = useMemo(() => {
+    return bonds.filter((b: any) => {
+      const matchEmp = !bondFilterEmployer || (b.employer_name || '').toLowerCase().includes(bondFilterEmployer.toLowerCase())
+      const matchProj = !bondFilterProject || (b.project_name || '').toLowerCase().includes(bondFilterProject.toLowerCase())
+      const matchCont = !bondFilterContractor || (b.contractor_name || '').toLowerCase().includes(bondFilterContractor.toLowerCase())
+      return matchEmp && matchProj && matchCont
+    })
+  }, [bonds, bondFilterEmployer, bondFilterProject, bondFilterContractor])
+
+  const filteredEots = useMemo(() => {
+    return eots.filter((e: any) => {
+      const matchEmp = !eotFilterEmployer || (e.client_name || '').toLowerCase().includes(eotFilterEmployer.toLowerCase())
+      const matchProj = !eotFilterProject || (e.project_name || '').toLowerCase().includes(eotFilterProject.toLowerCase())
+      const matchCont = !eotFilterContractor || (e.contractor_name || '').toLowerCase().includes(eotFilterContractor.toLowerCase())
+      return matchEmp && matchProj && matchCont
+    })
+  }, [eots, eotFilterEmployer, eotFilterProject, eotFilterContractor])
+
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-secondary/30 to-background">
+      {/* Hidden Datalists for Combobox behavior */}
+      <datalist id="unique-employers">
+        {uniqueEmployers.map(emp => <option key={emp} value={emp} />)}
+      </datalist>
+      <datalist id="bond-projects-list">
+        {bondProjectsList.map(p => <option key={p} value={p} />)}
+      </datalist>
+      <datalist id="bond-contractors-list">
+        {bondContractorsList.map(c => <option key={c} value={c} />)}
+      </datalist>
+      <datalist id="eot-projects-list">
+        {eotProjectsList.map(p => <option key={p} value={p} />)}
+      </datalist>
+      <datalist id="eot-contractors-list">
+        {eotContractorsList.map(c => <option key={c} value={c} />)}
+      </datalist>
       <SiteHeader />
       {/* ── Delete confirmation dialog ── */}
       {deleteTarget && (
@@ -956,6 +1040,7 @@ function RegistrarPageInner() {
                         <Label htmlFor="bond-employer">Employer Name *</Label>
                         <Input
                           id="bond-employer"
+                          list="unique-employers"
                           value={bondEmployer}
                           onChange={(e) => setBondEmployer(e.target.value)}
                           placeholder="e.g. Bonga University"
@@ -967,6 +1052,7 @@ function RegistrarPageInner() {
                         <Label htmlFor="bond-project">Project Name / Description *</Label>
                         <Input
                           id="bond-project"
+                          list="bond-projects-list"
                           value={bondProject}
                           onChange={(e) => setBondProject(e.target.value)}
                           placeholder="e.g. Teaching Hotel"
@@ -978,6 +1064,7 @@ function RegistrarPageInner() {
                         <Label htmlFor="bond-contractor">Contractor *</Label>
                         <Input
                           id="bond-contractor"
+                          list="bond-contractors-list"
                           value={bondContractor}
                           onChange={(e) => setBondContractor(e.target.value)}
                           placeholder="Contractor Construction PLC"
@@ -1098,6 +1185,7 @@ function RegistrarPageInner() {
                         <Label htmlFor="eot-client">Client / Employer *</Label>
                         <Input
                           id="eot-client"
+                          list="unique-employers"
                           value={eotClient}
                           onChange={(e) => setEotClient(e.target.value)}
                           placeholder="e.g. Ministry of Education"
@@ -1109,6 +1197,7 @@ function RegistrarPageInner() {
                         <Label htmlFor="eot-project">Project Name *</Label>
                         <Input
                           id="eot-project"
+                          list="eot-projects-list"
                           value={eotProject}
                           onChange={(e) => setEotProject(e.target.value)}
                           placeholder="Project title"
@@ -1120,6 +1209,7 @@ function RegistrarPageInner() {
                         <Label htmlFor="eot-contractor">Contractor *</Label>
                         <Input
                           id="eot-contractor"
+                          list="eot-contractors-list"
                           value={eotContractor}
                           onChange={(e) => setEotContractor(e.target.value)}
                           placeholder="e.g. Abiy Construction"
@@ -1517,6 +1607,12 @@ function RegistrarPageInner() {
                     </div>
                     <div className="flex items-center gap-2 self-start sm:self-auto">
                       <button
+                        onClick={() => setShowBondFilters(!showBondFilters)}
+                        className={`inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold shadow-sm transition-all hover:border-primary hover:bg-primary hover:text-primary-foreground ${showBondFilters ? 'bg-secondary text-foreground' : 'bg-background text-foreground'}`}
+                      >
+                        <Filter className="size-3.5" /> Filter
+                      </button>
+                      <button
                         onClick={handleExportBonds}
                         disabled={isExportingBonds}
                         title="Export Master Bonds Ledger"
@@ -1537,13 +1633,20 @@ function RegistrarPageInner() {
                     </div>
                   </CardHeader>
                   <CardContent className="p-0">
-                    {bonds.length === 0 ? (
-                      <p className="py-12 text-center text-sm text-muted-foreground">No bonds logged. Enter details above.</p>
+                    {filteredBonds.length === 0 ? (
+                      <p className="py-12 text-center text-sm text-muted-foreground">No bonds logged or matching filters.</p>
                     ) : (
                       <>
+                        {showBondFilters && (
+                          <div className="flex flex-wrap gap-2 p-4 border-b border-border bg-secondary/10">
+                            <Input placeholder="Filter Employer..." value={bondFilterEmployer} onChange={e => setBondFilterEmployer(e.target.value)} className="h-8 text-xs w-36" />
+                            <Input placeholder="Filter Project..." value={bondFilterProject} onChange={e => setBondFilterProject(e.target.value)} className="h-8 text-xs w-36" />
+                            <Input placeholder="Filter Contractor..." value={bondFilterContractor} onChange={e => setBondFilterContractor(e.target.value)} className="h-8 text-xs w-36" />
+                          </div>
+                        )}
                         {/* Mobile card list */}
                         <div className="flex flex-col divide-y divide-border md:hidden">
-                          {bonds.map((b: any) => (
+                          {filteredBonds.map((b: any) => (
                             <div key={b.id} className="p-4">
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0 flex-1">
@@ -1551,7 +1654,8 @@ function RegistrarPageInner() {
                                     <span className="text-xs font-bold text-foreground">{b.project_name}</span>
                                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${b.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600' : b.status === 'Expired' ? 'bg-rose-500/10 text-rose-600' : 'bg-secondary text-muted-foreground'}`}>{b.status}</span>
                                   </div>
-                                  <p className="mt-0.5 text-xs text-muted-foreground">Contractor: {b.contractor_name}</p>
+                                  <p className="mt-0.5 text-xs text-muted-foreground font-semibold">Client: {b.employer_name}</p>
+                                  <p className="text-xs text-muted-foreground">Contractor: {b.contractor_name}</p>
                                   <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                                     <span className="text-muted-foreground">{b.bond_type}</span>
                                     <span className="font-semibold text-foreground">{b.amount ? `${Number(b.amount).toLocaleString()} ETB` : '—'}</span>
@@ -1588,11 +1692,12 @@ function RegistrarPageInner() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {bonds.map((b: any) => (
+                              {filteredBonds.map((b: any) => (
                                 <TableRow key={b.id} className="transition-colors hover:bg-secondary/10">
                                   <TableCell>
-                                    <div className="text-xs font-semibold text-foreground">{b.project_name}</div>
-                                    <div className="mt-0.5 text-[10px] text-muted-foreground">Contractor: {b.contractor_name}</div>
+                                    <div className="text-xs font-bold text-foreground">{b.project_name}</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground">Client: {b.employer_name}</div>
+                                    <div className="text-[11px] text-muted-foreground">Contractor: {b.contractor_name}</div>
                                   </TableCell>
                                   <TableCell className="text-xs">{b.bond_type}</TableCell>
                                   <TableCell className="text-xs font-semibold text-foreground">{b.amount ? `${Number(b.amount).toLocaleString()} ETB` : '—'}</TableCell>
@@ -1638,6 +1743,12 @@ function RegistrarPageInner() {
                     </div>
                     <div className="flex items-center gap-2 self-start sm:self-auto">
                       <button
+                        onClick={() => setShowEotFilters(!showEotFilters)}
+                        className={`inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold shadow-sm transition-all hover:border-primary hover:bg-primary hover:text-primary-foreground ${showEotFilters ? 'bg-secondary text-foreground' : 'bg-background text-foreground'}`}
+                      >
+                        <Filter className="size-3.5" /> Filter
+                      </button>
+                      <button
                         onClick={handleExportEot}
                         disabled={isExportingEot}
                         title="Export EOT Log"
@@ -1658,13 +1769,20 @@ function RegistrarPageInner() {
                     </div>
                   </CardHeader>
                   <CardContent className="p-0">
-                    {eots.length === 0 ? (
-                      <p className="py-12 text-center text-sm text-muted-foreground">No EOT log entries. Create one above.</p>
+                    {filteredEots.length === 0 ? (
+                      <p className="py-12 text-center text-sm text-muted-foreground">No EOT log entries found.</p>
                     ) : (
                       <>
+                        {showEotFilters && (
+                          <div className="flex flex-wrap gap-2 p-4 border-b border-border bg-secondary/10">
+                            <Input placeholder="Filter Client..." value={eotFilterEmployer} onChange={e => setEotFilterEmployer(e.target.value)} className="h-8 text-xs w-36" />
+                            <Input placeholder="Filter Project..." value={eotFilterProject} onChange={e => setEotFilterProject(e.target.value)} className="h-8 text-xs w-36" />
+                            <Input placeholder="Filter Contractor..." value={eotFilterContractor} onChange={e => setEotFilterContractor(e.target.value)} className="h-8 text-xs w-36" />
+                          </div>
+                        )}
                         {/* Mobile card list */}
                         <div className="flex flex-col divide-y divide-border md:hidden">
-                          {eots.map((e: any) => (
+                          {filteredEots.map((e: any) => (
                             <div key={e.id} className="p-4">
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0 flex-1">
@@ -1673,7 +1791,8 @@ function RegistrarPageInner() {
                                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getEotBadgeColor(e.status)}`}>{e.status}</span>
                                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] ${getAlertBadgeColor(e.eot_status_alert)}`}>{e.eot_status_alert}</span>
                                   </div>
-                                  <p className="mt-0.5 text-xs text-muted-foreground">Contractor: {e.contractor_name}</p>
+                                  <p className="mt-0.5 text-xs text-muted-foreground font-semibold">Client: {e.client_name}</p>
+                                  <p className="text-xs text-muted-foreground">Contractor: {e.contractor_name}</p>
                                   <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                                     <span className="text-muted-foreground">Claim #{e.eot_number}</span>
                                     <span className="font-semibold text-foreground">{e.days_approved} days approved</span>
@@ -1705,11 +1824,12 @@ function RegistrarPageInner() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {eots.map((e: any) => (
+                              {filteredEots.map((e: any) => (
                                 <TableRow key={e.id} className="transition-colors hover:bg-secondary/10">
                                   <TableCell>
-                                    <div className="text-xs font-semibold text-foreground">{e.project_name}</div>
-                                    <div className="mt-0.5 text-[10px] text-muted-foreground">Contractor: {e.contractor_name}</div>
+                                    <div className="text-xs font-bold text-foreground">{e.project_name}</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-muted-foreground">Client: {e.client_name}</div>
+                                    <div className="text-[11px] text-muted-foreground">Contractor: {e.contractor_name}</div>
                                   </TableCell>
                                   <TableCell className="text-center text-xs font-bold">{e.eot_number}</TableCell>
                                   <TableCell className="text-center text-xs font-semibold">{e.days_approved} days</TableCell>

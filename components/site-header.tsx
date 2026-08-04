@@ -180,15 +180,18 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-        <Link href="/dashboard" className="flex items-center gap-2.5">
+        <Link href="/dashboard" className="flex items-end gap-1.5 group">
           <Image 
             src="/logo.png" 
             alt="EF A&E Logo" 
             width={150} 
             height={40} 
-            className="h-10 w-auto" 
+            className="h-10 w-auto transition-transform group-hover:scale-105" 
             priority 
           />
+          <span className="text-[11px] font-semibold tracking-tight text-muted-foreground pb-1.5">
+            EF Architects &amp; Engineers
+          </span>
         </Link>
 
         {authLoading ? (
@@ -305,7 +308,7 @@ export function SiteHeader() {
               <div className="absolute -bottom-4 left-8 size-20 rounded-full bg-white/5" />
 
               <div className="relative flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
+                <div className="flex items-end gap-1.5">
                   <Image 
                     src="/logo.png" 
                     alt="EF A&E Logo" 
@@ -314,6 +317,9 @@ export function SiteHeader() {
                     className="h-8 w-auto brightness-0 invert" 
                     priority 
                   />
+                  <span className="text-[11px] font-semibold tracking-tight text-white/80 pb-1">
+                    EF Architects &amp; Engineers
+                  </span>
                 </div>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
