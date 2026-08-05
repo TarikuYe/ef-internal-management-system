@@ -222,31 +222,54 @@ export async function GET(_req: Request) {
       })
     }
 
-    // Flatten latest review onto each log
-    const logs = rawLogs.map((log: any) => {
+    // 1. Flatten latest review onto each log
+    const allEnrichedLogs = rawLogs.map((log: any) => {
       const reviews: any[] = log.daily_work_log_reviews ?? []
       const latestReview = reviews.sort(
         (a: any, b: any) => new Date(b.reviewed_at).getTime() - new Date(a.reviewed_at).getTime()
       )[0]
 
-      const calcHours = getCalculatedHours(log)
+      const status = latestReview?.approval_status ?? 'Pending'
+      const baseCalcHours = getCalculatedHours(log)
+      const isReturnedOrRejected = status === 'Returned' || status === 'Rejected'
 
       return {
         ...log,
         daily_work_log_reviews: undefined,
-        approval_status: latestReview?.approval_status ?? 'Pending',
+        approval_status: status,
         head_comments:   latestReview?.head_comments   ?? null,
         reviewed_at:     latestReview?.reviewed_at     ?? null,
-        calc_hours:      calcHours,
+        // Returned / Rejected logs do NOT count towards calculated working hours
+        calc_hours:      isReturnedOrRejected ? 0 : baseCalcHours,
       }
-    }).sort((a: any, b: any) => {
-      // Sort by date DESC then employee name ASC
-      const dateCmp = (b.log_date ?? '').localeCompare(a.log_date ?? '')
-      if (dateCmp !== 0) return dateCmp
-      const na = (a.employees?.full_name ?? '').toLowerCase()
-      const nb = (b.employees?.full_name ?? '').toLowerCase()
-      return na.localeCompare(nb)
     })
+
+    // 2. Deduplicate resubmission pairs (per employee per log_date):
+    // Identify all employee_id + log_date combinations that have a non-Returned/non-Rejected row
+    const activeKeysWithNonReturned = new Set<string>()
+    allEnrichedLogs.forEach((log: any) => {
+      const isReturnedOrRejected = log.approval_status === 'Returned' || log.approval_status === 'Rejected'
+      if (!isReturnedOrRejected && log.employee_id && log.log_date) {
+        activeKeysWithNonReturned.add(`${log.employee_id}_${log.log_date}`)
+      }
+    })
+
+    // Suppress old Returned/Rejected rows if a non-Returned row exists for the same employee + log_date
+    const logs = allEnrichedLogs
+      .filter((log: any) => {
+        const isReturnedOrRejected = log.approval_status === 'Returned' || log.approval_status === 'Rejected'
+        if (!isReturnedOrRejected) return true
+        const key = `${log.employee_id}_${log.log_date}`
+        return !activeKeysWithNonReturned.has(key)
+      })
+      .sort((a: any, b: any) => {
+        // Sort by date DESC then employee name ASC
+        const dateCmp = (b.log_date ?? '').localeCompare(a.log_date ?? '')
+        if (dateCmp !== 0) return dateCmp
+        const na = (a.employees?.full_name ?? '').toLowerCase()
+        const nb = (b.employees?.full_name ?? '').toLowerCase()
+        return na.localeCompare(nb)
+      })
 
     // Calculate Summary Metrics for KPI Bar
     const totalLogsCount = logs.length

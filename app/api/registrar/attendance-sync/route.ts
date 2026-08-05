@@ -74,11 +74,21 @@ function validatePunch(p: unknown): p is BiometricPunch {
   )
 }
 
+import { timingSafeEqual } from 'crypto'
+import { checkRateLimit } from '@/lib/security/rate-limit'
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/registrar/attendance-sync
 // ─────────────────────────────────────────────────────────────────────────────
 export async function POST(request: Request) {
-  // ── 1. Security guardrail — validate shared sync token ──────────────────
+  // Rate limiting gateway endpoint
+  const ip = request.headers.get('x-forwarded-for') || 'gateway'
+  const rateLimit = await checkRateLimit(`attendance_sync:${ip}`, 60, 60 * 1000)
+  if (!rateLimit.success && rateLimit.response) {
+    return rateLimit.response
+  }
+
+  // ── 1. Security guardrail — validate shared sync token (Timing-Safe) ─────
   const incomingToken = request.headers.get('x-biometric-sync-token') ?? ''
   const expectedToken = process.env.INTERNAL_SYNC_TOKEN ?? ''
 
@@ -90,7 +100,14 @@ export async function POST(request: Request) {
     )
   }
 
-  if (incomingToken !== expectedToken) {
+  const incomingBuf = Buffer.from(incomingToken)
+  const expectedBuf = Buffer.from(expectedToken)
+
+  const isTokenValid =
+    incomingBuf.length === expectedBuf.length &&
+    timingSafeEqual(incomingBuf, expectedBuf)
+
+  if (!isTokenValid) {
     console.warn('[attendance-sync] Rejected request — invalid sync token.')
     return NextResponse.json(
       { error: 'Unauthorised — invalid sync token.' },

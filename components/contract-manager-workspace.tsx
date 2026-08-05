@@ -454,12 +454,12 @@ export function ContractManagerWorkspace({
   const [evalEmployeeId, setEvalEmployeeId] = useState('')
   const [evalStart, setEvalStart] = useState('')
   const [evalEnd, setEvalEnd] = useState('')
-  const [techScore, setTechScore] = useState('80')
-  const [prodScore, setProdScore] = useState('80')
-  const [puncScore, setPuncScore] = useState('80')
-  const [commScore, setCommScore] = useState('80')
-  const [repScore, setRepScore] = useState('80')
-  const [adaptScore, setAdaptScore] = useState('80')
+  const [techScore, setTechScore] = useState('32')
+  const [prodScore, setProdScore] = useState('24')
+  const [puncScore, setPuncScore] = useState('8')
+  const [commScore, setCommScore] = useState('4')
+  const [repScore, setRepScore] = useState('4')
+  const [adaptScore, setAdaptScore] = useState('8')
   const [submittingEval, setSubmittingEval] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number | string; tab: string } | null>(null)
 
@@ -976,12 +976,12 @@ export function ContractManagerWorkspace({
       employee_id: evalEmployeeId,
       evaluation_period_start: evalStart,
       evaluation_period_end: evalEnd,
-      tech_competence_score: parseFloat(techScore) || 0,
-      productivity_score: parseFloat(prodScore) || 0,
-      punctuality_score: parseFloat(puncScore) || 0,
-      communication_score: parseFloat(commScore) || 0,
-      reporting_score: parseFloat(repScore) || 0,
-      adaptability_score: parseFloat(adaptScore) || 0
+      tech_competence_score: ((parseFloat(techScore) || 0) / 40) * 100,
+      productivity_score: ((parseFloat(prodScore) || 0) / 30) * 100,
+      punctuality_score: ((parseFloat(puncScore) || 0) / 10) * 100,
+      communication_score: ((parseFloat(commScore) || 0) / 5) * 100,
+      reporting_score: ((parseFloat(repScore) || 0) / 5) * 100,
+      adaptability_score: ((parseFloat(adaptScore) || 0) / 10) * 100
     }
     if (editId) payload.id = editId
 
@@ -1003,17 +1003,30 @@ export function ContractManagerWorkspace({
     }
   }
 
+  const editEvaluation = (item: any) => {
+    setEditId(item.id)
+    setEvalEmployeeId(item.employee_id)
+    setEvalStart(item.evaluation_period_start)
+    setEvalEnd(item.evaluation_period_end)
+    setTechScore(String(Number(item.tech_competence_score || 0) * 40 / 100))
+    setProdScore(String(Number(item.productivity_score || 0) * 30 / 100))
+    setPuncScore(String(Number(item.punctuality_score || 0) * 10 / 100))
+    setCommScore(String(Number(item.communication_score || 0) * 5 / 100))
+    setRepScore(String(Number(item.reporting_score || 0) * 5 / 100))
+    setAdaptScore(String(Number(item.adaptability_score || 0) * 10 / 100))
+  }
+
   const clearEvaluationForm = () => {
     setEditId(null)
     setEvalEmployeeId('')
     setEvalStart('')
     setEvalEnd('')
-    setTechScore('80')
-    setProdScore('80')
-    setPuncScore('80')
-    setCommScore('80')
-    setRepScore('80')
-    setAdaptScore('80')
+    setTechScore('32')
+    setProdScore('24')
+    setPuncScore('8')
+    setCommScore('4')
+    setRepScore('4')
+    setAdaptScore('8')
   }
 
   // 6. Delete helper
@@ -2641,33 +2654,33 @@ export function ContractManagerWorkspace({
                 <div className="grid grid-cols-2 gap-2">
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="ev-tech" className="text-xs">Technical (40%)</Label>
-                    <Input id="ev-tech" type="number" min="0" max="100" value={techScore} onChange={(e) => setTechScore(e.target.value)} />
+                    <Input id="ev-tech" type="number" min="0" max="40" step="any" value={techScore} onChange={(e) => setTechScore(e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="ev-prod" className="text-xs">Productivity (30%)</Label>
-                    <Input id="ev-prod" type="number" min="0" max="100" value={prodScore} onChange={(e) => setProdScore(e.target.value)} />
+                    <Input id="ev-prod" type="number" min="0" max="30" step="any" value={prodScore} onChange={(e) => setProdScore(e.target.value)} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="ev-punc" className="text-xs">Punctuality (10%)</Label>
-                    <Input id="ev-punc" type="number" min="0" max="100" value={puncScore} onChange={(e) => setPuncScore(e.target.value)} />
+                    <Input id="ev-punc" type="number" min="0" max="10" step="any" value={puncScore} onChange={(e) => setPuncScore(e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="ev-comm" className="text-xs">Communication (5%)</Label>
-                    <Input id="ev-comm" type="number" min="0" max="100" value={commScore} onChange={(e) => setCommScore(e.target.value)} />
+                    <Input id="ev-comm" type="number" min="0" max="5" step="any" value={commScore} onChange={(e) => setCommScore(e.target.value)} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="ev-rep" className="text-xs">Reporting (5%)</Label>
-                    <Input id="ev-rep" type="number" min="0" max="100" value={repScore} onChange={(e) => setRepScore(e.target.value)} />
+                    <Input id="ev-rep" type="number" min="0" max="5" step="any" value={repScore} onChange={(e) => setRepScore(e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-1">
                     <Label htmlFor="ev-adapt" className="text-xs">Adaptability (10%)</Label>
-                    <Input id="ev-adapt" type="number" min="0" max="100" value={adaptScore} onChange={(e) => setAdaptScore(e.target.value)} />
+                    <Input id="ev-adapt" type="number" min="0" max="10" step="any" value={adaptScore} onChange={(e) => setAdaptScore(e.target.value)} />
                   </div>
                 </div>
 
@@ -2696,7 +2709,10 @@ export function ContractManagerWorkspace({
                       <div className="text-xs text-muted-foreground mt-0.5">{e.evaluation_period_start} to {e.evaluation_period_end}</div>
                       <div className="text-xs font-bold text-primary mt-0.5">Score: {Number(e.total_score || 0).toFixed(1)}</div>
                     </div>
-                    <button onClick={() => handleDeleteRecord(e.id, 'evaluations')} className="inline-flex size-7 items-center justify-center rounded-md border text-destructive hover:bg-rose-50 shrink-0"><Trash2 className="size-3.5" /></button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => editEvaluation(e)} className="inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground hover:bg-secondary" title="Edit"><Edit2 className="size-3.5" /></button>
+                      <button onClick={() => handleDeleteRecord(e.id, 'evaluations')} className="inline-flex size-7 items-center justify-center rounded-md border text-destructive hover:bg-rose-50" title="Delete"><Trash2 className="size-3.5" /></button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2724,7 +2740,10 @@ export function ContractManagerWorkspace({
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
-                          <button onClick={() => handleDeleteRecord(e.id, 'evaluations')} className="inline-flex size-7 items-center justify-center rounded-md border text-destructive hover:bg-rose-50"><Trash2 className="size-3.5" /></button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => editEvaluation(e)} className="inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground hover:bg-secondary" title="Edit"><Edit2 className="size-3.5" /></button>
+                            <button onClick={() => handleDeleteRecord(e.id, 'evaluations')} className="inline-flex size-7 items-center justify-center rounded-md border text-destructive hover:bg-rose-50" title="Delete"><Trash2 className="size-3.5" /></button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

@@ -9,6 +9,7 @@ export function Logo({ inverted = false, className }: { inverted?: boolean, clas
         alt="EF A&E Logo" 
         width={150} 
         height={40} 
+        style={{ height: '40px', width: 'auto' }}
         className={`h-10 w-auto transition-transform group-hover:scale-105 ${inverted ? 'brightness-0 invert' : ''}`} 
         priority 
       />

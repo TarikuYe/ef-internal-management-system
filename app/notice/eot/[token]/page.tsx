@@ -196,7 +196,7 @@ export default function EotNoticePage({
           >
             <div className="flex items-center gap-3">
               <div className="flex justify-center">
-                <Image src="/logo.png" alt="EF A&E Logo" width={36} height={36} className="h-9 w-auto brightness-0 invert" priority />
+                <Image src="/logo.png" alt="EF A&E Logo" width={36} height={36} style={{ height: '36px', width: 'auto' }} className="h-9 w-auto brightness-0 invert" priority />
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-300">

@@ -410,12 +410,12 @@ function RegistrarPageInner() {
   const [evalEmployeeId, setEvalEmployeeId] = useState('')
   const [evalStart, setEvalStart] = useState('')
   const [evalEnd, setEvalEnd] = useState('')
-  const [scoreTech, setScoreTech] = useState('80')
-  const [scoreProd, setScoreProd] = useState('80')
-  const [scorePunc, setScorePunc] = useState('80')
-  const [scoreComm, setScoreComm] = useState('80')
-  const [scoreRep, setScoreRep] = useState('80')
-  const [scoreAdapt, setScoreAdapt] = useState('80')
+  const [scoreTech, setScoreTech] = useState('32')
+  const [scoreProd, setScoreProd] = useState('24')
+  const [scorePunc, setScorePunc] = useState('8')
+  const [scoreComm, setScoreComm] = useState('4')
+  const [scoreRep, setScoreRep] = useState('4')
+  const [scoreAdapt, setScoreAdapt] = useState('8')
 
   const handleEvaluationSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -424,12 +424,12 @@ function RegistrarPageInner() {
       employee_id: evalEmployeeId,
       evaluation_period_start: evalStart,
       evaluation_period_end: evalEnd,
-      tech_competence_score: parseFloat(scoreTech),
-      productivity_score: parseFloat(scoreProd),
-      punctuality_score: parseFloat(scorePunc),
-      communication_score: parseFloat(scoreComm),
-      reporting_score: parseFloat(scoreRep),
-      adaptability_score: parseFloat(scoreAdapt)
+      tech_competence_score: ((parseFloat(scoreTech) || 0) / 40) * 100,
+      productivity_score: ((parseFloat(scoreProd) || 0) / 30) * 100,
+      punctuality_score: ((parseFloat(scorePunc) || 0) / 10) * 100,
+      communication_score: ((parseFloat(scoreComm) || 0) / 5) * 100,
+      reporting_score: ((parseFloat(scoreRep) || 0) / 5) * 100,
+      adaptability_score: ((parseFloat(scoreAdapt) || 0) / 10) * 100
     }
 
     if (editId) payload.id = editId
@@ -456,12 +456,12 @@ function RegistrarPageInner() {
     setEvalEmployeeId(item.employee_id)
     setEvalStart(item.evaluation_period_start)
     setEvalEnd(item.evaluation_period_end)
-    setScoreTech(String(item.tech_competence_score))
-    setScoreProd(String(item.productivity_score))
-    setScorePunc(String(item.punctuality_score))
-    setScoreComm(String(item.communication_score))
-    setScoreRep(String(item.reporting_score))
-    setScoreAdapt(String(item.adaptability_score))
+    setScoreTech(String(Number(item.tech_competence_score || 0) * 40 / 100))
+    setScoreProd(String(Number(item.productivity_score || 0) * 30 / 100))
+    setScorePunc(String(Number(item.punctuality_score || 0) * 10 / 100))
+    setScoreComm(String(Number(item.communication_score || 0) * 5 / 100))
+    setScoreRep(String(Number(item.reporting_score || 0) * 5 / 100))
+    setScoreAdapt(String(Number(item.adaptability_score || 0) * 10 / 100))
   }
 
   const clearEvaluationForm = () => {
@@ -469,12 +469,12 @@ function RegistrarPageInner() {
     setEvalEmployeeId('')
     setEvalStart('')
     setEvalEnd('')
-    setScoreTech('80')
-    setScoreProd('80')
-    setScorePunc('80')
-    setScoreComm('80')
-    setScoreRep('80')
-    setScoreAdapt('80')
+    setScoreTech('32')
+    setScoreProd('24')
+    setScorePunc('8')
+    setScoreComm('4')
+    setScoreRep('4')
+    setScoreAdapt('8')
   }
 
   // ────────────────────────────────────────────────────────
@@ -1369,7 +1369,7 @@ function RegistrarPageInner() {
 
                       <div className="mt-2 border-t border-border pt-3">
                         <span className="mb-3 block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Factor Scores (0 – 100)
+                          Factor Scores
                         </span>
 
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
@@ -1379,7 +1379,8 @@ function RegistrarPageInner() {
                               id="tech-score"
                               type="number"
                               min="0"
-                              max="100"
+                              max="40"
+                              step="any"
                               value={scoreTech}
                               onChange={(e) => setScoreTech(e.target.value)}
                               required
@@ -1392,7 +1393,8 @@ function RegistrarPageInner() {
                               id="prod-score"
                               type="number"
                               min="0"
-                              max="100"
+                              max="30"
+                              step="any"
                               value={scoreProd}
                               onChange={(e) => setScoreProd(e.target.value)}
                               required
@@ -1405,7 +1407,8 @@ function RegistrarPageInner() {
                               id="punc-score"
                               type="number"
                               min="0"
-                              max="100"
+                              max="10"
+                              step="any"
                               value={scorePunc}
                               onChange={(e) => setScorePunc(e.target.value)}
                               required
@@ -1418,7 +1421,8 @@ function RegistrarPageInner() {
                               id="comm-score"
                               type="number"
                               min="0"
-                              max="100"
+                              max="5"
+                              step="any"
                               value={scoreComm}
                               onChange={(e) => setScoreComm(e.target.value)}
                               required
@@ -1431,7 +1435,8 @@ function RegistrarPageInner() {
                               id="rep-score"
                               type="number"
                               min="0"
-                              max="100"
+                              max="5"
+                              step="any"
                               value={scoreRep}
                               onChange={(e) => setScoreRep(e.target.value)}
                               required
@@ -1444,7 +1449,8 @@ function RegistrarPageInner() {
                               id="adapt-score"
                               type="number"
                               min="0"
-                              max="100"
+                              max="10"
+                              step="any"
                               value={scoreAdapt}
                               onChange={(e) => setScoreAdapt(e.target.value)}
                               required

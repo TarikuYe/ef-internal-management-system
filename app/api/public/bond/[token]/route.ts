@@ -12,14 +12,22 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { checkRateLimit } from '@/lib/security/rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
+  // Rate limit public requests by IP / request URL
+  const ip = req.headers.get('x-forwarded-for') || 'public'
+  const rateLimit = await checkRateLimit(`public_bond:${ip}`, 30, 60 * 1000)
+  if (!rateLimit.success && rateLimit.response) {
+    return rateLimit.response
+  }
+
   const { token } = await params
 
   // Basic UUID format guard — reject obviously malformed tokens immediately

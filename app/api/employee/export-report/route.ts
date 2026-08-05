@@ -205,13 +205,13 @@ export async function GET(_req: Request) {
   //   rows for that date — they have been superseded by the correction.
   const datesWithNonReturned = new Set<string>(
     allRows
-      .filter((r: any) => r.approval_status !== 'Returned')
+      .filter((r: any) => r.approval_status !== 'Returned' && r.approval_status !== 'Rejected')
       .map((r: any) => r.log_date as string),
   )
 
   const rows = allRows.filter(
     (r: any) =>
-      !(r.approval_status === 'Returned' && datesWithNonReturned.has(r.log_date)),
+      !((r.approval_status === 'Returned' || r.approval_status === 'Rejected') && datesWithNonReturned.has(r.log_date)),
   )
 
   // ── 3.5 Check for Design Department ───────────────────────────────────────

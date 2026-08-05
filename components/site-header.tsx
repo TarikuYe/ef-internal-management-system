@@ -186,6 +186,7 @@ export function SiteHeader() {
             alt="EF A&E Logo" 
             width={150} 
             height={40} 
+            style={{ height: '40px', width: 'auto' }}
             className="h-10 w-auto transition-transform group-hover:scale-105" 
             priority 
           />
@@ -314,6 +315,7 @@ export function SiteHeader() {
                     alt="EF A&E Logo" 
                     width={150} 
                     height={40} 
+                    style={{ height: '32px', width: 'auto' }}
                     className="h-8 w-auto brightness-0 invert" 
                     priority 
                   />

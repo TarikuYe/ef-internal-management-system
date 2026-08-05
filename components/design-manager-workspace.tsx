@@ -382,12 +382,12 @@ export function DesignManagerWorkspace({
   const [evalStart, setEvalStart] = useState('')
   const [evalEnd, setEvalEnd] = useState('')
   const [evalPeriodLabel, setEvalPeriodLabel] = useState('')
-  const [techScore, setTechScore] = useState('80')
-  const [prodScore, setProdScore] = useState('80')
-  const [puncScore, setPuncScore] = useState('80')
-  const [commScore, setCommScore] = useState('80')
-  const [repScore, setRepScore] = useState('80')
-  const [adaptScore, setAdaptScore] = useState('80')
+  const [techScore, setTechScore] = useState('32')
+  const [prodScore, setProdScore] = useState('24')
+  const [puncScore, setPuncScore] = useState('8')
+  const [commScore, setCommScore] = useState('4')
+  const [repScore, setRepScore] = useState('4')
+  const [adaptScore, setAdaptScore] = useState('8')
   const [submittingEval, setSubmittingEval] = useState(false)
   const [editId, setEditId] = useState<string | number | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number | string; tab: string } | null>(null)
@@ -399,9 +399,12 @@ export function DesignManagerWorkspace({
     const method = editId ? 'PATCH' : 'POST'
     const payload: any = {
       employee_id: evalEmployeeId, evaluation_period_start: evalStart, evaluation_period_end: evalEnd,
-      tech_competence_score: parseFloat(techScore) || 0, productivity_score: parseFloat(prodScore) || 0,
-      punctuality_score: parseFloat(puncScore) || 0, communication_score: parseFloat(commScore) || 0,
-      reporting_score: parseFloat(repScore) || 0, adaptability_score: parseFloat(adaptScore) || 0,
+      tech_competence_score: ((parseFloat(techScore) || 0) / 40) * 100,
+      productivity_score: ((parseFloat(prodScore) || 0) / 30) * 100,
+      punctuality_score: ((parseFloat(puncScore) || 0) / 10) * 100,
+      communication_score: ((parseFloat(commScore) || 0) / 5) * 100,
+      reporting_score: ((parseFloat(repScore) || 0) / 5) * 100,
+      adaptability_score: ((parseFloat(adaptScore) || 0) / 10) * 100,
     }
     if (evalPeriodLabel) payload.period_label = evalPeriodLabel
     if (editId) payload.id = editId
@@ -415,19 +418,33 @@ export function DesignManagerWorkspace({
     finally { setSubmittingEval(false) }
   }
 
+  const editEvaluation = (item: any) => {
+    setEditId(item.id)
+    setEvalEmployeeId(item.employee_id)
+    setEvalStart(item.evaluation_period_start)
+    setEvalEnd(item.evaluation_period_end)
+    setEvalPeriodLabel(item.period_label || '')
+    setTechScore(String(Number(item.tech_competence_score || 0) * 40 / 100))
+    setProdScore(String(Number(item.productivity_score || 0) * 30 / 100))
+    setPuncScore(String(Number(item.punctuality_score || 0) * 10 / 100))
+    setCommScore(String(Number(item.communication_score || 0) * 5 / 100))
+    setRepScore(String(Number(item.reporting_score || 0) * 5 / 100))
+    setAdaptScore(String(Number(item.adaptability_score || 0) * 10 / 100))
+  }
+
   const clearEvalForm = () => {
     setEditId(null); setEvalEmployeeId(''); setEvalStart(''); setEvalEnd(''); setEvalPeriodLabel('')
-    setTechScore('80'); setProdScore('80'); setPuncScore('80'); setCommScore('80'); setRepScore('80'); setAdaptScore('80')
+    setTechScore('32'); setProdScore('24'); setPuncScore('8'); setCommScore('4'); setRepScore('4'); setAdaptScore('8')
   }
 
   // Computed evaluation score preview
   const previewScore = useMemo(() => {
-    const t = (parseFloat(techScore) || 0) * 0.40
-    const p = (parseFloat(prodScore) || 0) * 0.30
-    const pu = (parseFloat(puncScore) || 0) * 0.10
-    const c = (parseFloat(commScore) || 0) * 0.05
-    const r = (parseFloat(repScore) || 0) * 0.05
-    const a = (parseFloat(adaptScore) || 0) * 0.10
+    const t = parseFloat(techScore) || 0
+    const p = parseFloat(prodScore) || 0
+    const pu = parseFloat(puncScore) || 0
+    const c = parseFloat(commScore) || 0
+    const r = parseFloat(repScore) || 0
+    const a = parseFloat(adaptScore) || 0
     const total = t + p + pu + c + r + a
     const grade = total >= 90 ? 'A' : total >= 80 ? 'B' : total >= 70 ? 'C' : total >= 60 ? 'D' : 'NI'
     const level = total >= 90 ? 'Outstanding' : total >= 80 ? 'Very Good' : total >= 70 ? 'Good' : total >= 60 ? 'Satisfactory' : 'Needs Improvement'
@@ -1250,21 +1267,21 @@ export function DesignManagerWorkspace({
 
                 {/* Criteria matching the evaluation sample */}
                 <div className="rounded-lg border border-border bg-muted/20 p-3 flex flex-col gap-2.5">
-                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Evaluation Criteria (0–100)</h4>
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Evaluation Criteria</h4>
                   {[
-                    { id: 'dev-tech', label: 'Technical Competence & Work Quality', weight: '40%', value: techScore, setter: setTechScore },
-                    { id: 'dev-prod', label: 'Productivity & Task Completion', weight: '30%', value: prodScore, setter: setProdScore },
-                    { id: 'dev-punc', label: 'Punctuality & Attendance', weight: '10%', value: puncScore, setter: setPuncScore },
-                    { id: 'dev-comm', label: 'Communication & Teamwork', weight: '5%', value: commScore, setter: setCommScore },
-                    { id: 'dev-rep', label: 'Reporting & Documentation', weight: '5%', value: repScore, setter: setRepScore },
-                    { id: 'dev-adapt', label: 'Adaptability & Learning', weight: '10%', value: adaptScore, setter: setAdaptScore },
+                    { id: 'dev-tech', label: 'Technical Competence & Work Quality', maxVal: 40, weight: '40%', value: techScore, setter: setTechScore },
+                    { id: 'dev-prod', label: 'Productivity & Task Completion', maxVal: 30, weight: '30%', value: prodScore, setter: setProdScore },
+                    { id: 'dev-punc', label: 'Punctuality & Attendance', maxVal: 10, weight: '10%', value: puncScore, setter: setPuncScore },
+                    { id: 'dev-comm', label: 'Communication & Teamwork', maxVal: 5, weight: '5%', value: commScore, setter: setCommScore },
+                    { id: 'dev-rep', label: 'Reporting & Documentation', maxVal: 5, weight: '5%', value: repScore, setter: setRepScore },
+                    { id: 'dev-adapt', label: 'Adaptability & Learning', maxVal: 10, weight: '10%', value: adaptScore, setter: setAdaptScore },
                   ].map(c => (
                     <div key={c.id} className="flex items-center gap-2">
                       <div className="flex-1 min-w-0">
                         <label htmlFor={c.id} className="text-[11px] font-medium text-foreground leading-tight">{c.label}</label>
                         <span className="text-[10px] text-muted-foreground ml-1">({c.weight})</span>
                       </div>
-                      <Input id={c.id} type="number" min="0" max="100" value={c.value}
+                      <Input id={c.id} type="number" min="0" max={c.maxVal} step="any" value={c.value}
                         onChange={(e) => c.setter(e.target.value)}
                         className="w-16 h-7 text-center text-xs font-bold shrink-0" />
                     </div>
@@ -1348,7 +1365,10 @@ export function DesignManagerWorkspace({
                             }`}>{e.performance_level}</span>
                           </TableCell>
                           <TableCell className="text-right">
-                            <button onClick={() => setDeleteConfirm({ id: e.id, tab: 'evaluations' })} className="inline-flex size-7 items-center justify-center rounded-md border text-destructive hover:bg-rose-50"><Trash2 className="size-3.5" /></button>
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => editEvaluation(e)} className="inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground hover:bg-secondary" title="Edit"><Edit2 className="size-3.5" /></button>
+                              <button onClick={() => setDeleteConfirm({ id: e.id, tab: 'evaluations' })} className="inline-flex size-7 items-center justify-center rounded-md border text-destructive hover:bg-rose-50" title="Delete"><Trash2 className="size-3.5" /></button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )
