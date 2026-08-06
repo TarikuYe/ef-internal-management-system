@@ -12,13 +12,19 @@ import {
   Users,
   Copy,
   CheckCheck,
-  ChevronDown,
-  ChevronUp,
   UserCheck,
   UserX,
   KeyRound,
   Trash2,
   AlertTriangle,
+  Eye,
+  Phone,
+  MapPin,
+  Briefcase,
+  Calendar,
+  Mail,
+  Building2,
+  Shield,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,8 +40,6 @@ import {
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
-interface Assignment { project_code: string }
-interface ProjectRow { code: string; name: string; active: boolean }
 interface Employee {
   id: string
   full_name: string
@@ -45,7 +49,11 @@ interface Employee {
   role: string
   active?: boolean   // optional – column may not exist in older DB schemas
   created_at: string
-  employee_project_assignments?: Assignment[]
+  job_title?: string | null
+  phone?: string | null
+  location?: string | null
+  bio?: string | null
+  avatar_url?: string | null
 }
 
 const DEPARTMENTS: { id: string; name: string }[] = [
@@ -64,6 +72,15 @@ const ROLES: { value: string; label: string }[] = [
   { value: 'gm',         label: 'GM' },
   { value: 'admin',      label: 'Admin' },
 ]
+
+const ROLE_BADGES: Record<string, string> = {
+  admin:     'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800',
+  dgm:       'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+  gm:        'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800',
+  registrar: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-200 dark:border-sky-800',
+  manager:   'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
+  employee:  'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
+}
 
 // Maps legacy ef_department enum values to new department IDs
 const OLD_DEPT_TO_ID: Record<string, string> = {
@@ -106,24 +123,11 @@ export function EmployeeManager() {
     '/api/employees',
     fetcher,
   )
-  const { data: projData } = useSWR<{ projects: ProjectRow[] }>('/api/projects?all=1', fetcher)
-  const { data: assignData, mutate: mutateAssign } = useSWR<{ assignments: { employee_id: string; project_code: string }[] }>(
-    '/api/employees/assignments',
-    fetcher,
-  )
 
   const employees = empData?.employees ?? []
-  const allProjects = projData?.projects ?? []
 
-  // Build a lookup: employee_id → Set<project_code>
-  const assignmentMap = React.useMemo(() => {
-    const map = new Map<string, Set<string>>()
-    for (const a of (assignData?.assignments ?? [])) {
-      if (!map.has(a.employee_id)) map.set(a.employee_id, new Set())
-      map.get(a.employee_id)!.add(a.project_code)
-    }
-    return map
-  }, [assignData])
+  // ── Employee details view modal ──
+  const [viewDetailsEmp, setViewDetailsEmp] = useState<Employee | null>(null)
 
   // ── Add form ──
   const [showAdd, setShowAdd] = useState(false)
@@ -145,10 +149,6 @@ export function EmployeeManager() {
   const [editDept, setEditDept] = useState('')
   const [editRole, setEditRole] = useState('')
   const [saving, setSaving] = useState(false)
-
-  // ── Expanded project assignment per employee ──
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [togglingAssign, setTogglingAssign] = useState<string | null>(null)
 
   // ── Busy (activate/deactivate) per row ──
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -265,31 +265,10 @@ export function EmployeeManager() {
     }
   }
 
-  async function handleToggleAssignment(emp: Employee, projectCode: string) {
-    const key = `${emp.id}-${projectCode}`
-    setTogglingAssign(key)
-    const isAssigned = (assignmentMap.get(emp.id) ?? new Set()).has(projectCode)
-    try {
-      const res = await fetch('/api/employees/assignments', {
-        method: isAssigned ? 'DELETE' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employee_id: emp.id, project_code: projectCode }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Failed.')
-      mutateAssign()
-    } catch (err) {
-      toast.error('Assignment update failed', {
-        description: err instanceof Error ? err.message : 'Please try again.',
-      })
-    } finally {
-      setTogglingAssign(null)
-    }
-  }
-
   async function handleCopy(text: string) {
     await navigator.clipboard.writeText(text)
     setCopied(true)
+    toast.success('Copied to clipboard')
     setTimeout(() => setCopied(false), 2000)
   }
 
@@ -338,8 +317,7 @@ export function EmployeeManager() {
               )}
             </div>
             <div className="mt-3 rounded-lg bg-destructive/8 px-3 py-2.5 text-xs text-destructive">
-              <strong>This action cannot be undone.</strong> Their account, login access, and all project
-              assignments will be permanently removed.
+              <strong>This action cannot be undone.</strong> Their account and login access will be permanently removed.
             </div>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button
@@ -361,6 +339,149 @@ export function EmployeeManager() {
                 ) : (
                   <><Trash2 className="size-4" /> Yes, delete permanently</>
                 )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Employee Details Modal ── */}
+      {viewDetailsEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="mx-4 w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+            {/* Header banner */}
+            <div className="relative bg-gradient-to-r from-primary/10 via-accent/10 to-primary/5 p-6 border-b border-border/60">
+              <button
+                onClick={() => setViewDetailsEmp(null)}
+                className="absolute right-4 top-4 rounded-full p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                aria-label="Close details"
+              >
+                <X className="size-5" />
+              </button>
+
+              <div className="flex items-center gap-4">
+                <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-display text-2xl font-bold shadow-md">
+                  {viewDetailsEmp.avatar_url ? (
+                    <img src={viewDetailsEmp.avatar_url} alt={viewDetailsEmp.full_name} className="size-full rounded-2xl object-cover" />
+                  ) : (
+                    viewDetailsEmp.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display text-xl font-bold text-foreground truncate">{viewDetailsEmp.full_name}</h3>
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                      viewDetailsEmp.active !== false ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-secondary text-muted-foreground'
+                    }`}>
+                      {viewDetailsEmp.active !== false ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground truncate">{viewDetailsEmp.email}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                      ROLE_BADGES[viewDetailsEmp.role] || 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {viewDetailsEmp.role}
+                    </span>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Building2 className="size-3.5" />
+                      {getDeptDisplay(viewDetailsEmp)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Profile Grid */}
+            <div className="p-6 flex flex-col gap-4 text-sm max-h-[60vh] overflow-y-auto">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Employee Profile Details</h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3">
+                  <Briefcase className="size-4 shrink-0 text-primary mt-0.5" />
+                  <div>
+                    <div className="text-xs text-muted-foreground font-medium">Job Title</div>
+                    <div className="font-semibold text-foreground mt-0.5">{viewDetailsEmp.job_title || 'Not set'}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3">
+                  <Building2 className="size-4 shrink-0 text-primary mt-0.5" />
+                  <div>
+                    <div className="text-xs text-muted-foreground font-medium">Department</div>
+                    <div className="font-semibold text-foreground mt-0.5">{getDeptDisplay(viewDetailsEmp)}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3">
+                  <Mail className="size-4 shrink-0 text-primary mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-muted-foreground font-medium">Work Email</div>
+                    <div className="font-semibold text-foreground mt-0.5 truncate">{viewDetailsEmp.email}</div>
+                  </div>
+                  <button
+                    onClick={() => handleCopy(viewDetailsEmp.email)}
+                    className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                    title="Copy Email"
+                  >
+                    <Copy className="size-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3">
+                  <Phone className="size-4 shrink-0 text-primary mt-0.5" />
+                  <div>
+                    <div className="text-xs text-muted-foreground font-medium">Phone Number</div>
+                    <div className="font-semibold text-foreground mt-0.5">{viewDetailsEmp.phone || 'Not provided'}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3">
+                  <MapPin className="size-4 shrink-0 text-primary mt-0.5" />
+                  <div>
+                    <div className="text-xs text-muted-foreground font-medium">Location / Office</div>
+                    <div className="font-semibold text-foreground mt-0.5">{viewDetailsEmp.location || 'Not provided'}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3">
+                  <Calendar className="size-4 shrink-0 text-primary mt-0.5" />
+                  <div>
+                    <div className="text-xs text-muted-foreground font-medium">Account Created</div>
+                    <div className="font-semibold text-foreground mt-0.5">
+                      {viewDetailsEmp.created_at ? new Date(viewDetailsEmp.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {viewDetailsEmp.bio && (
+                <div className="rounded-xl border border-border/60 bg-secondary/30 p-3">
+                  <div className="text-xs text-muted-foreground font-medium mb-1">Bio / Notes</div>
+                  <p className="text-foreground text-xs leading-relaxed">{viewDetailsEmp.bio}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between border-t border-border bg-secondary/20 px-6 py-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const emp = viewDetailsEmp
+                  setViewDetailsEmp(null)
+                  setEditingId(emp.id)
+                  setEditName(emp.full_name)
+                  setEditDept(getEditDeptId(emp))
+                  setEditRole(emp.role ?? 'employee')
+                }}
+              >
+                <Pencil className="size-3.5 mr-1.5" /> Edit Account
+              </Button>
+
+              <Button size="sm" onClick={() => setViewDetailsEmp(null)}>
+                Close
               </Button>
             </div>
           </div>
@@ -411,9 +532,9 @@ export function EmployeeManager() {
       {/* ── Header ── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="font-display text-lg font-bold text-foreground">Manage employees</h3>
+          <h3 className="font-display text-lg font-bold text-foreground">User Management</h3>
           <p className="text-sm text-muted-foreground">
-            Create accounts, assign projects, and control access for all team members.
+            Create employee accounts, view profile details, and manage access for all team members.
           </p>
         </div>
         <Button
@@ -536,8 +657,6 @@ export function EmployeeManager() {
               {/* ── Mobile card list (hidden md+) ── */}
               <div className="flex flex-col divide-y divide-border md:hidden">
                 {employees.map((emp) => {
-                  const isExpanded = expandedId === emp.id
-                  const assignedCodes = assignmentMap.get(emp.id) ?? new Set<string>()
                   const roleBadgeClass =
                     emp.role === 'dgm'  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                     : emp.role === 'gm'    ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
@@ -568,10 +687,8 @@ export function EmployeeManager() {
                             </>
                           ) : (
                             <>
-                              <button onClick={() => { setEditingId(emp.id); setEditName(emp.full_name); setEditDept(getEditDeptId(emp)); setEditRole(emp.role ?? 'employee') }} className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label={`Edit ${emp.full_name}`}><Pencil className="size-3.5" /></button>
-                              <button onClick={() => setExpandedId(isExpanded ? null : emp.id)} className={`inline-flex h-8 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors ${isExpanded ? 'border-accent bg-accent/10 text-accent' : 'border-border text-muted-foreground hover:bg-secondary hover:text-foreground'}`}>
-                                Projects{isExpanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-                              </button>
+                              <button onClick={() => setViewDetailsEmp(emp)} className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label={`View details for ${emp.full_name}`} title="View profile details"><Eye className="size-3.5" /></button>
+                              <button onClick={() => { setEditingId(emp.id); setEditName(emp.full_name); setEditDept(getEditDeptId(emp)); setEditRole(emp.role ?? 'employee') }} className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label={`Edit ${emp.full_name}`} title="Edit employee"><Pencil className="size-3.5" /></button>
                               <button onClick={() => handleToggleActive(emp)} disabled={busyId === emp.id} className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50" aria-label={emp.active ? 'Deactivate' : 'Reactivate'}>
                                 {busyId === emp.id ? <Loader2 className="size-3.5 animate-spin" /> : emp.active ? <UserX className="size-3.5" /> : <UserCheck className="size-3.5" />}
                               </button>
@@ -595,27 +712,6 @@ export function EmployeeManager() {
                       {editingId !== emp.id && (
                         <div className="mt-1.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
                           <span>{getDeptDisplay(emp)}</span>
-                          {[...assignedCodes].map((code) => (
-                            <span key={code} className="inline-flex items-center rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">{code}</span>
-                          ))}
-                        </div>
-                      )}
-                      {isExpanded && (
-                        <div className="mt-3 rounded-lg bg-secondary/30 p-3">
-                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Projects for {emp.full_name}</p>
-                          <div className="flex flex-wrap gap-2">
-                            {allProjects.map((project) => {
-                              const isAssigned = assignedCodes.has(project.code)
-                              const isToggling = togglingAssign === `${emp.id}-${project.code}`
-                              return (
-                                <button key={project.code} onClick={() => handleToggleAssignment(emp, project.code)} disabled={isToggling || !project.active}
-                                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-50 ${isAssigned ? 'border-accent bg-accent/15 text-accent' : 'border-border bg-background text-muted-foreground hover:border-accent/50 hover:text-foreground'} ${!project.active ? 'line-through opacity-40' : ''}`}>
-                                  {isToggling ? <Loader2 className="size-3 animate-spin" /> : isAssigned ? <Check className="size-3" /> : <Plus className="size-3" />}
-                                  {project.code} — {project.name}
-                                </button>
-                              )
-                            })}
-                          </div>
                         </div>
                       )}
                     </div>
@@ -631,16 +727,12 @@ export function EmployeeManager() {
                       <TableHead>Name</TableHead>
                       <TableHead>Department</TableHead>
                       <TableHead>Role</TableHead>
-                      <TableHead>Assigned projects</TableHead>
                       <TableHead className="w-24 text-center">Status</TableHead>
                       <TableHead className="w-48 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {employees.map((emp) => {
-                    const isExpanded = expandedId === emp.id
-                    const assignedCodes = assignmentMap.get(emp.id) ?? new Set<string>()
-
                     const roleBadgeClass =
                       emp.role === 'dgm'
                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
@@ -650,229 +742,156 @@ export function EmployeeManager() {
                         ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
                         : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
 
-                    // ⚠️ Must use React.Fragment (not <>) so we can pass a key prop
                     return (
-                      <React.Fragment key={emp.id}>
-                        <TableRow className={!emp.active ? 'opacity-50' : undefined}>
-                          {/* Name / email */}
-                          <TableCell>
+                      <TableRow key={emp.id} className={!emp.active ? 'opacity-50' : undefined}>
+                        {/* Name / email */}
+                        <TableCell>
+                          {editingId === emp.id ? (
+                            <Input
+                              id={`edit-name-${emp.id}`}
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              className="h-8 text-sm"
+                              autoFocus
+                            />
+                          ) : (
+                            <>
+                              <div className="font-medium text-foreground">{emp.full_name}</div>
+                              <div className="text-xs text-muted-foreground">{emp.email}</div>
+                            </>
+                          )}
+                        </TableCell>
+
+                        {/* Department */}
+                        <TableCell>
+                          {['dgm', 'gm'].includes(emp.role) ? (
+                            <span className="text-xs text-muted-foreground italic">—</span>
+                          ) : editingId === emp.id ? (
+                            <select
+                              id={`edit-dept-${emp.id}`}
+                              value={editDept}
+                              onChange={(e) => setEditDept(e.target.value)}
+                              className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            >
+                              {DEPARTMENTS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              {getDeptDisplay(emp)}
+                            </span>
+                          )}
+                        </TableCell>
+
+                        {/* Role */}
+                        <TableCell>
+                          {editingId === emp.id ? (
+                            <select
+                              id={`edit-role-${emp.id}`}
+                              value={editRole}
+                              onChange={(e) => setEditRole(e.target.value)}
+                              className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            >
+                              {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                            </select>
+                          ) : (
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${roleBadgeClass}`}>
+                              {emp.role}
+                            </span>
+                          )}
+                        </TableCell>
+
+                        {/* Status badge */}
+                        <TableCell className="text-center">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                              emp.active
+                                ? 'bg-chart-4/15 text-chart-4'
+                                : 'bg-secondary text-muted-foreground'
+                            }`}
+                          >
+                            {emp.active ? 'Active' : 'Inactive'}
+                          </span>
+                        </TableCell>
+
+                        {/* Actions */}
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
                             {editingId === emp.id ? (
-                              <Input
-                                id={`edit-name-${emp.id}`}
-                                value={editName}
-                                onChange={(e) => setEditName(e.target.value)}
-                                className="h-8 text-sm"
-                                autoFocus
-                              />
+                              <>
+                                <button
+                                  onClick={() => handleSaveEdit(emp.id)}
+                                  disabled={saving}
+                                  className="inline-flex size-8 items-center justify-center rounded-md bg-accent text-accent-foreground hover:opacity-90 disabled:opacity-50"
+                                  aria-label="Save"
+                                >
+                                  {saving
+                                    ? <Loader2 className="size-3.5 animate-spin" />
+                                    : <Check className="size-3.5" />}
+                                </button>
+                                <button
+                                  onClick={() => setEditingId(null)}
+                                  className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+                                  aria-label="Cancel"
+                                >
+                                  <X className="size-3.5" />
+                                </button>
+                              </>
                             ) : (
                               <>
-                                <div className="font-medium text-foreground">{emp.full_name}</div>
-                                <div className="text-xs text-muted-foreground">{emp.email}</div>
+                                {/* View details */}
+                                <button
+                                  onClick={() => setViewDetailsEmp(emp)}
+                                  className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                                  aria-label={`View details for ${emp.full_name}`}
+                                  title="View employee profile details"
+                                >
+                                  <Eye className="size-3.5" />
+                                </button>
+
+                                {/* Edit name/dept/role */}
+                                <button
+                                  onClick={() => {
+                                    setEditingId(emp.id)
+                                    setEditName(emp.full_name)
+                                    setEditDept(getEditDeptId(emp))
+                                    setEditRole(emp.role ?? 'employee')
+                                  }}
+                                  className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                                  aria-label={`Edit ${emp.full_name}`}
+                                  title="Edit employee"
+                                >
+                                  <Pencil className="size-3.5" />
+                                </button>
+
+                                {/* Activate / deactivate */}
+                                <button
+                                  onClick={() => handleToggleActive(emp)}
+                                  disabled={busyId === emp.id}
+                                  className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                                  aria-label={emp.active ? 'Deactivate' : 'Reactivate'}
+                                  title={emp.active ? 'Deactivate account' : 'Reactivate account'}
+                                >
+                                  {busyId === emp.id
+                                    ? <Loader2 className="size-3.5 animate-spin" />
+                                    : emp.active
+                                      ? <UserX className="size-3.5" />
+                                      : <UserCheck className="size-3.5" />}
+                                </button>
+
+                                {/* Delete */}
+                                <button
+                                  onClick={() => setDeleteTarget(emp)}
+                                  className="inline-flex size-8 items-center justify-center rounded-md border border-destructive/40 text-destructive/70 transition-colors hover:bg-destructive hover:text-white"
+                                  aria-label={`Delete ${emp.full_name}`}
+                                  title="Permanently delete employee"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
                               </>
                             )}
-                          </TableCell>
-
-                          {/* Department */}
-                          <TableCell>
-                            {['dgm', 'gm'].includes(emp.role) ? (
-                              <span className="text-xs text-muted-foreground italic">—</span>
-                            ) : editingId === emp.id ? (
-                              <select
-                                id={`edit-dept-${emp.id}`}
-                                value={editDept}
-                                onChange={(e) => setEditDept(e.target.value)}
-                                className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                              >
-                                {DEPARTMENTS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                              </select>
-                            ) : (
-                              <span className="text-sm text-muted-foreground">
-                                {getDeptDisplay(emp)}
-                              </span>
-                            )}
-                          </TableCell>
-
-                          {/* Role */}
-                          <TableCell>
-                            {editingId === emp.id ? (
-                              <select
-                                id={`edit-role-${emp.id}`}
-                                value={editRole}
-                                onChange={(e) => setEditRole(e.target.value)}
-                                className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                              >
-                                {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                              </select>
-                            ) : (
-                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${roleBadgeClass}`}>
-                                {emp.role}
-                              </span>
-                            )}
-                          </TableCell>
-
-                          {/* Assigned projects summary */}
-                          <TableCell>
-                            {assignedCodes.size === 0 ? (
-                              <span className="text-xs text-muted-foreground">None assigned</span>
-                            ) : (
-                              <div className="flex flex-wrap gap-1">
-                                {[...assignedCodes].map((code) => (
-                                  <span
-                                    key={code}
-                                    className="inline-flex items-center rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent"
-                                  >
-                                    {code}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </TableCell>
-
-                          {/* Status badge */}
-                          <TableCell className="text-center">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                                emp.active
-                                  ? 'bg-chart-4/15 text-chart-4'
-                                  : 'bg-secondary text-muted-foreground'
-                              }`}
-                            >
-                              {emp.active ? 'Active' : 'Inactive'}
-                            </span>
-                          </TableCell>
-
-                          {/* Actions */}
-                          <TableCell>
-                            <div className="flex items-center justify-end gap-1">
-                              {editingId === emp.id ? (
-                                <>
-                                  <button
-                                    onClick={() => handleSaveEdit(emp.id)}
-                                    disabled={saving}
-                                    className="inline-flex size-8 items-center justify-center rounded-md bg-accent text-accent-foreground hover:opacity-90 disabled:opacity-50"
-                                    aria-label="Save"
-                                  >
-                                    {saving
-                                      ? <Loader2 className="size-3.5 animate-spin" />
-                                      : <Check className="size-3.5" />}
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingId(null)}
-                                    className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
-                                    aria-label="Cancel"
-                                  >
-                                    <X className="size-3.5" />
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  {/* Edit name/dept/role */}
-                                  <button
-                                    onClick={() => {
-                                      setEditingId(emp.id)
-                                      setEditName(emp.full_name)
-                                      setEditDept(getEditDeptId(emp))
-                                      setEditRole(emp.role ?? 'employee')
-                                    }}
-                                    className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                                    aria-label={`Edit ${emp.full_name}`}
-                                  >
-                                    <Pencil className="size-3.5" />
-                                  </button>
-
-                                  {/* Project assignment toggle */}
-                                  <button
-                                    onClick={() => setExpandedId(isExpanded ? null : emp.id)}
-                                    className={`inline-flex h-8 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors ${
-                                      isExpanded
-                                        ? 'border-accent bg-accent/10 text-accent'
-                                        : 'border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
-                                    }`}
-                                    aria-label="Manage project assignments"
-                                  >
-                                    Projects
-                                    {isExpanded
-                                      ? <ChevronUp className="size-3" />
-                                      : <ChevronDown className="size-3" />}
-                                  </button>
-
-                                  {/* Activate / deactivate */}
-                                  <button
-                                    onClick={() => handleToggleActive(emp)}
-                                    disabled={busyId === emp.id}
-                                    className="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
-                                    aria-label={emp.active ? 'Deactivate' : 'Reactivate'}
-                                    title={emp.active ? 'Deactivate account' : 'Reactivate account'}
-                                  >
-                                    {busyId === emp.id
-                                      ? <Loader2 className="size-3.5 animate-spin" />
-                                      : emp.active
-                                        ? <UserX className="size-3.5" />
-                                        : <UserCheck className="size-3.5" />}
-                                  </button>
-
-                                  {/* Delete */}
-                                  <button
-                                    onClick={() => setDeleteTarget(emp)}
-                                    className="inline-flex size-8 items-center justify-center rounded-md border border-destructive/40 text-destructive/70 transition-colors hover:bg-destructive hover:text-white"
-                                    aria-label={`Delete ${emp.full_name}`}
-                                    title="Permanently delete employee"
-                                  >
-                                    <Trash2 className="size-3.5" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-
-                        {/* ── Inline project assignment panel ── */}
-                        {isExpanded && (
-                          <TableRow className="bg-secondary/30">
-                            <TableCell colSpan={6} className="py-4 pl-6">
-                              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                Project assignments for {emp.full_name}
-                              </p>
-                              {allProjects.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                  No projects yet. Create projects in the Projects tab first.
-                                </p>
-                              ) : (
-                                <div className="flex flex-wrap gap-2">
-                                  {allProjects.map((project) => {
-                                    const isAssigned = assignedCodes.has(project.code)
-                                    const toggleKey = `${emp.id}-${project.code}`
-                                    const isToggling = togglingAssign === toggleKey
-
-                                    return (
-                                      <button
-                                        key={project.code}
-                                        onClick={() => handleToggleAssignment(emp, project.code)}
-                                        disabled={isToggling || !project.active}
-                                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-50 ${
-                                          isAssigned
-                                            ? 'border-accent bg-accent/15 text-accent'
-                                            : 'border-border bg-background text-muted-foreground hover:border-accent/50 hover:text-foreground'
-                                        } ${!project.active ? 'line-through opacity-40' : ''}`}
-                                        title={!project.active ? 'Archived project' : undefined}
-                                      >
-                                        {isToggling ? (
-                                          <Loader2 className="size-3 animate-spin" />
-                                        ) : isAssigned ? (
-                                          <Check className="size-3" />
-                                        ) : (
-                                          <Plus className="size-3" />
-                                        )}
-                                        {project.code} — {project.name}
-                                      </button>
-                                    )
-                                  })}
-                                </div>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </React.Fragment>
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     )
                   })}
                   </TableBody>

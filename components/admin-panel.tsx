@@ -32,7 +32,7 @@ type AdminTab =
 
 const TAB_META: Record<AdminTab, { label: string; icon: React.ElementType; description: string }> = {
   dashboard:   { label: 'Dashboard',        icon: Activity,       description: 'System statistics and analytics' },
-  users:       { label: 'Add Users',        icon: Users,          description: 'Create new employee accounts' },
+  users:       { label: 'User Management',   icon: Users,          description: 'Manage employees and view profile details' },
   disable:     { label: 'Disable Users',     icon: UserX,          description: 'Activate or deactivate accounts' },
   reset:       { label: 'Reset Passwords',   icon: KeyRound,       description: 'Generate temporary passwords' },
   departments: { label: 'Departments',       icon: Building2,      description: 'Manage department names' },

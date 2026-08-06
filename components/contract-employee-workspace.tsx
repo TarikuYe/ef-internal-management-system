@@ -211,6 +211,8 @@ export function ContractEmployeeWorkspace({
     { refreshInterval: 3_000 }
   )
 
+  const { data: weeklyTasksData, mutate: mutateWeeklyTasks } = useSWR<{ tasks: any[] }>('/api/weekly-tasks', fetcher)
+
   // Real-time listener for timesheets, reviews, employee project assignments & projects changes
   useEffect(() => {
     const supabase = createClient()
@@ -244,12 +246,19 @@ export function ContractEmployeeWorkspace({
           mutateProjects()
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'weekly_tasks' },
+        () => {
+          mutateWeeklyTasks()
+        }
+      )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [mutateTimesheet, mutateProjects])
+  }, [mutateTimesheet, mutateProjects, mutateWeeklyTasks])
 
   // Fetch Registrar records
   const { data: correspondenceData, mutate: mutateCorr } = useSWR('/api/correspondence', fetcher)
@@ -264,6 +273,7 @@ export function ContractEmployeeWorkspace({
   const bonds = bondsData?.bonds ?? []
   const eots = eotsData?.eots ?? []
   const evaluations = evalsData?.evaluations ?? []
+  const weeklyTasks = weeklyTasksData?.tasks ?? []
 
   const handleRefresh = async (mutateFn: () => Promise<any>, name: string) => {
     const toastId = toast.loading(`Refreshing ${name}...`)
@@ -385,6 +395,28 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
   }
   return Math.round((diffMin / 60) * 10) / 10
 }
+
+  const handleWeeklyTaskSelect = (index: number, taskId: string) => {
+    const row = localRows[index]
+    if (isRowLocked(row)) return
+    
+    const task = weeklyTasks.find((t: any) => t.id?.toString() === taskId)
+    if (!task) return
+
+    setLocalRows(prev => {
+      const copy = [...prev]
+      copy[index] = {
+        ...copy[index],
+        assigned_tasks: task.task_description || '',
+      }
+      try {
+        const draftRows = copy.filter(r => !isRowLocked(r))
+        localStorage.setItem(draftKey, JSON.stringify(draftRows))
+        setDraftSaved(true)
+      } catch (_) {}
+      return copy
+    })
+  }
 
   const handleInputChange = (index: number, field: keyof TimesheetRow, value: any) => {
     const row = localRows[index]
@@ -1309,7 +1341,11 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                   </thead>
                   <tbody>
                     {localRows.map((row, idx) => {
+                      const isWeeklyTask = weeklyTasks.some((t: any) => 
+                        (t.task_description && t.task_description === row.assigned_tasks)
+                      )
                       const locked = isRowLocked(row)
+                      const fieldLocked = locked || isWeeklyTask
                       const completionPct = Math.round(row.completion_percentage * 100)
                       // Group rows by date — only show day cell for first row of each date
                       const isFirstRowOfDate = idx === 0 || localRows[idx - 1].log_date !== row.log_date
@@ -1342,37 +1378,62 @@ function calcHoursFromTime(entrance: string, leave: string, isSaturday: boolean)
                             </td>
                           ) : null}
 
-                          {/* Office Hours */}
-                          {isFirstRowOfDate ? (
-                            <td className="py-4 px-4 align-top" rowSpan={rowsForDate.length}>
-                              <div className="flex flex-col gap-2.5">
-                                <TimePickerCell
-                                  value={row.office_entrance_time}
-                                  onChange={(v) => handleInputChange(idx, 'office_entrance_time', v)}
-                                  locked={true}
-                                  label="entrance time"
-                                />
-                                <TimePickerCell
-                                  value={row.office_leave_time}
-                                  onChange={(v) => handleInputChange(idx, 'office_leave_time', v)}
-                                  locked={true}
-                                  label="leave time"
-                                />
-                              </div>
-                            </td>
-                          ) : null}
+                          {/* Office Hours with Task Selection */}
+                          <td className="py-3 px-3 align-top">
+                            <div className="flex flex-col gap-2">
+                              {!locked && (
+                                <Select onValueChange={(v: any) => typeof v === 'string' && handleWeeklyTaskSelect(idx, v)}>
+                                  <SelectTrigger className="h-7 text-xs font-semibold bg-background border border-primary/30 text-primary">
+                                    <SelectValue placeholder="Select Plan..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {weeklyTasks.length > 0 ? (
+                                      weeklyTasks.map((t: any) => (
+                                        <SelectItem key={t.id} value={t.id.toString()}>
+                                          {t.task_code ? `${t.task_code} - ` : ''}{t.task_description.substring(0, 30)}{t.task_description.length > 30 ? '...' : ''}
+                                        </SelectItem>
+                                      ))
+                                    ) : (
+                                      <div className="py-2 px-2 text-xs text-muted-foreground text-center">No assigned plans</div>
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                              {isFirstRowOfDate && (
+                                <div className="flex flex-col gap-1.5 pt-1">
+                                  <TimePickerCell
+                                    value={row.office_entrance_time}
+                                    onChange={(v) => handleInputChange(idx, 'office_entrance_time', v)}
+                                    locked={true}
+                                    label="entrance time"
+                                  />
+                                  <TimePickerCell
+                                    value={row.office_leave_time}
+                                    onChange={(v) => handleInputChange(idx, 'office_leave_time', v)}
+                                    locked={true}
+                                    label="leave time"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </td>
 
                           {/* Assigned Tasks */}
                           <td className="py-3 px-3 align-top">
                             <textarea
                               value={row.assigned_tasks}
                               onChange={(e) => handleInputChange(idx, 'assigned_tasks', e.target.value)}
-                              disabled={locked}
+                              disabled={fieldLocked}
                               placeholder="Tasks assigned (markdown list...)"
                               rows={3}
-                              className="w-full text-xs p-1.5 rounded-md border border-input bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed leading-relaxed"
+                              className="w-full text-xs p-1.5 rounded-md border border-input bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-60 disabled:cursor-not-allowed leading-relaxed font-medium"
                             />
-                            {!locked && (
+                            {isWeeklyTask && (
+                              <div className="text-[10px] text-blue-600 font-semibold mt-0.5 flex items-center gap-1">
+                                <Lock className="size-3" /> Assigned Plan (Uneditable)
+                              </div>
+                            )}
+                            {!fieldLocked && (
                               <button
                                 type="button"
                                 onClick={() => correctFieldText(idx, 'assigned_tasks')}

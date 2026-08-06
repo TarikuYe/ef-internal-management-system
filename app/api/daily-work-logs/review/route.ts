@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       .eq('id', user.id)
       .maybeSingle()
 
-    if (!reviewer || (reviewer.role !== 'admin' && reviewer.role !== 'dgm' && reviewer.role !== 'manager')) {
+    if (!reviewer || (reviewer.role !== 'admin' && reviewer.role !== 'dgm' && reviewer.role !== 'gm' && reviewer.role !== 'manager')) {
       return NextResponse.json(
         { error: 'Permission denied. Only admin, DGM, or managers can record approval decisions.' },
         { status: 403 },

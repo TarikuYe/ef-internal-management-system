@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { SignOutButton } from '@/components/sign-out-button'
 import { isSigningOut } from '@/lib/sign-out-state'
 import React, { useEffect, useState, useMemo } from 'react'
-import Image from 'next/image'
+import { Logo } from '@/components/logo'
 
 const ROUTING_DICTIONARY: Record<string, { label: string; href: string; icon: any }[]> = {
   // 'employee' is the actual DB value for regular staff
@@ -30,14 +30,12 @@ const ROUTING_DICTIONARY: Record<string, { label: string; href: string; icon: an
   ],
   dgm: [
     { label: 'Control Tower', href: '/dashboard/dgm/analytics', icon: BarChart3 },
-    { label: 'Projects', href: '/dashboard/dgm/projects', icon: FolderKanban },
-    { label: 'View Registers', href: '/dashboard/registrar', icon: LayoutDashboard },
+    // { label: 'Projects', href: '/dashboard/dgm/projects', icon: FolderKanban },
   ],
   // 'gm' (General Manager) shares the same navigation as DGM
   gm: [
     { label: 'Control Tower', href: '/dashboard/dgm/analytics', icon: BarChart3 },
-    { label: 'Projects', href: '/dashboard/dgm/projects', icon: FolderKanban },
-    { label: 'View Registers', href: '/dashboard/registrar', icon: LayoutDashboard },
+    // { label: 'Projects', href: '/dashboard/dgm/projects', icon: FolderKanban },
   ],
 }
 
@@ -180,20 +178,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-        <Link href="/dashboard" className="flex items-end gap-1.5 group">
-          <Image 
-            src="/logo.png" 
-            alt="EF A&E Logo" 
-            width={150} 
-            height={40} 
-            style={{ height: '40px', width: 'auto' }}
-            className="h-10 w-auto transition-transform group-hover:scale-105" 
-            priority 
-          />
-          <span className="text-[11px] font-semibold tracking-tight text-muted-foreground pb-1.5">
-            EF Architects &amp; Engineers
-          </span>
-        </Link>
+        <Logo href={user ? "/dashboard" : "/"} size="md" />
 
         {authLoading ? (
           // Placeholder that matches the approximate width of the nav area
@@ -309,20 +294,7 @@ export function SiteHeader() {
               <div className="absolute -bottom-4 left-8 size-20 rounded-full bg-white/5" />
 
               <div className="relative flex items-center justify-between mb-6">
-                <div className="flex items-end gap-1.5">
-                  <Image 
-                    src="/logo.png" 
-                    alt="EF A&E Logo" 
-                    width={150} 
-                    height={40} 
-                    style={{ height: '32px', width: 'auto' }}
-                    className="h-8 w-auto brightness-0 invert" 
-                    priority 
-                  />
-                  <span className="text-[11px] font-semibold tracking-tight text-white/80 pb-1">
-                    EF Architects &amp; Engineers
-                  </span>
-                </div>
+                <Logo href={user ? "/dashboard" : "/"} inverted size="sm" />
                 <button
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex size-8 items-center justify-center rounded-lg bg-white/10 text-white hover:bg-white/20 transition-all"

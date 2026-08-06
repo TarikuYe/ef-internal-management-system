@@ -65,7 +65,7 @@ function SignInForm() {
           <div className="rounded-xl border border-border bg-card shadow-sm">
             <div className="border-b border-border px-6 py-5 text-center">
               <div className="mx-auto mb-3 flex justify-center">
-                <Image src="/logo.png" alt="EF A&E Logo" width={150} height={40} style={{ height: '48px', width: 'auto' }} className="h-12 w-auto" priority />
+                <Image src="/logo.png" alt="EF A&E Logo" width={160} height={48} className="h-12 w-auto object-contain" priority />
               </div>
               <h1 className="font-display text-xl font-extrabold tracking-tight text-foreground">
                 Welcome back

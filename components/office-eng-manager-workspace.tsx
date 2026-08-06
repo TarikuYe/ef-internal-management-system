@@ -316,8 +316,14 @@ export function OfficeEngManagerWorkspace({
     finally { setSavingWeeklyTask(false) }
   }
 
+  const openCreateWeeklyTaskForm = () => {
+    setEditingWeeklyTaskId(null); setShowWeeklyTaskForm(true)
+    setWtCode(''); setWtDiscipline(''); setWtDesc(''); setWtStart(''); setWtEnd(''); setWtDeadline('')
+    setWtPriority('Medium'); setWtAssignedTo([]); setWtStatus('Not Started'); setWtRemarks('')
+  }
+
   const clearWeeklyTaskForm = () => {
-    setEditingWeeklyTaskId(null); setShowWeeklyTaskForm(!showWeeklyTaskForm)
+    setEditingWeeklyTaskId(null); setShowWeeklyTaskForm(false)
     setWtCode(''); setWtDiscipline(''); setWtDesc(''); setWtStart(''); setWtEnd(''); setWtDeadline('')
     setWtPriority('Medium'); setWtAssignedTo([]); setWtStatus('Not Started'); setWtRemarks('')
   }
@@ -715,7 +721,7 @@ export function OfficeEngManagerWorkspace({
                 </CardTitle>
                 <CardDescription>Plan tasks and assign them to employees for the upcoming week.</CardDescription>
               </div>
-              <Button size="sm" onClick={() => clearWeeklyTaskForm()} className="h-8 gap-1.5 font-bold">
+              <Button size="sm" onClick={() => openCreateWeeklyTaskForm()} className="h-8 gap-1.5 font-bold">
                 <Plus className="size-3.5" /> Create Task
               </Button>
             </CardHeader>

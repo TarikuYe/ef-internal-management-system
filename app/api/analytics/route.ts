@@ -19,7 +19,7 @@ async function checkAdminAccess(userId: string, userEmail: string) {
     .select('role')
     .eq('id', userId)
     .maybeSingle()
-  return employee?.role === 'dgm' || employee?.role === 'admin'
+  return employee?.role === 'dgm' || employee?.role === 'gm' || employee?.role === 'admin'
 }
 
 // GET /api/analytics
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
 
     const hasAccess = await checkAdminAccess(user.id, user.email ?? '')
     if (!hasAccess) {
-      return NextResponse.json({ error: 'Admin or DGM access required.' }, { status: 403 })
+      return NextResponse.json({ error: 'Admin, DGM, or GM access required.' }, { status: 403 })
     }
 
     const admin = createAdminClient()
@@ -42,10 +42,11 @@ export async function GET(request: Request) {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    // 1. Letters metrics
+    // 1. Letters metrics & overdue list
     const { data: letters, error: lettersError } = await admin
       .from('correspondence_register')
-      .select('response_required, response_due_date, response_sent_date, status')
+      .select('*')
+      .order('date_logged', { ascending: false })
 
     if (lettersError) {
       console.error('[analytics] letters fetch error:', lettersError.message)
@@ -54,11 +55,13 @@ export async function GET(request: Request) {
 
     let totalLetters = letters?.length ?? 0
     let overdueLetters = 0
+    const overdueLettersList: any[] = []
 
     for (const letter of letters ?? []) {
       if (letter.response_required && !letter.response_sent_date) {
         if (letter.response_due_date && letter.response_due_date < todayStr) {
           overdueLetters++
+          overdueLettersList.push(letter)
         }
       }
     }
@@ -67,6 +70,7 @@ export async function GET(request: Request) {
     const { data: bonds, error: bondsError } = await admin
       .from('project_bonds')
       .select('*')
+      .order('expiry_date', { ascending: true })
 
     if (bondsError) {
       console.error('[analytics] bonds fetch error:', bondsError.message)
@@ -75,7 +79,7 @@ export async function GET(request: Request) {
 
     let activeBonds = 0
     let expiredOrReleasedBonds = 0
-    const criticalExpiredBonds = []
+    const criticalExpiredBonds: any[] = []
 
     for (const bond of bonds ?? []) {
       const expDate = new Date(bond.expiry_date)
@@ -97,48 +101,180 @@ export async function GET(request: Request) {
       }
     }
 
-    // 3. EOT tracker & nearly expired alerts
+    // 3. EOT tracker & EOT analytics
     const { data: eots, error: eotsError } = await admin
       .from('eot_tracker')
       .select('*')
+      .order('revised_completion_date', { ascending: true })
 
     if (eotsError) {
       console.error('[analytics] EOT fetch error:', eotsError.message)
       return NextResponse.json({ error: 'Failed to retrieve EOT analytics.' }, { status: 500 })
     }
 
-    const nearlyExpiredEots = []
-    for (const eot of eots ?? []) {
+    const nearlyExpiredEots: any[] = []
+    let totalEotClaims = eots?.length ?? 0
+    let totalApprovedEotDays = 0
+    let pendingEotCount = 0
+    let approvedEotCount = 0
+    let expiredEotCount = 0
+    let expiringSoonEotCount = 0
+
+    const processedEots = (eots ?? []).map(eot => {
       const compDate = new Date(eot.revised_completion_date)
       compDate.setHours(0, 0, 0, 0)
 
       const diffTime = compDate.getTime() - today.getTime()
       const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
-      // Flag if within 30 days of deadline (inclusive of 0 to 30 days)
-      if (daysRemaining > 0 && daysRemaining <= 30) {
+      let alertStatus = 'Safe'
+      if (daysRemaining <= 0) {
+        alertStatus = 'Expired'
+        expiredEotCount++
+      } else if (daysRemaining <= 30) {
+        alertStatus = 'Expiring Soon'
+        expiringSoonEotCount++
         nearlyExpiredEots.push({
           ...eot,
           days_remaining: daysRemaining
         })
       }
-    }
 
-    // 4. Employee commitment averages (daily logs completion percentages)
-    const { data: logs, error: logsError } = await admin
+      if ((eot.status ?? '').toLowerCase() === 'approved') {
+        approvedEotCount++
+        totalApprovedEotDays += Number(eot.days_approved || 0)
+      } else if ((eot.status ?? '').toLowerCase() === 'pending') {
+        pendingEotCount++
+      }
+
+      return {
+        ...eot,
+        alertStatus,
+        days_remaining: daysRemaining
+      }
+    })
+
+    // 4. Fetch daily work logs with reviews and employee info
+    const { data: rawLogs, error: logsError } = await admin
       .from('daily_work_logs')
-      .select('completion_percentage, approval_status')
+      .select('*, employees(full_name, email, department, department_id, role), daily_work_log_reviews(approval_status, head_comments, reviewed_at)')
+      .order('log_date', { ascending: false })
 
-    let commitmentAverage = 0
-    let unverifiedLogsCount = 0
     if (logsError) {
       console.error('[analytics] logs fetch error:', logsError.message)
-      // Fallback but don't fail completely
-    } else if (logs && logs.length > 0) {
-      const totalPercentage = logs.reduce((sum, log) => sum + Number(log.completion_percentage || 0), 0)
-      commitmentAverage = (totalPercentage / logs.length) * 100
-      unverifiedLogsCount = logs.filter(log => log.approval_status === 'Pending').length
     }
+
+    // Process reviews and filter for Approved logs (manager-approved results)
+    const approvedLogs: any[] = []
+    let totalCommitmentPercentage = 0
+
+    const departmentMap: Record<string, {
+      id: string
+      name: string
+      approvedLogsCount: number
+      totalHours: number
+      onsiteHours: number
+      totalCommitment: number
+      employeesSet: Set<string>
+    }> = {
+      'contract': {
+        id: 'contract',
+        name: 'Contract & Procurement Admin',
+        approvedLogsCount: 0,
+        totalHours: 0,
+        onsiteHours: 0,
+        totalCommitment: 0,
+        employeesSet: new Set()
+      },
+      'design': {
+        id: 'design',
+        name: 'Design Department',
+        approvedLogsCount: 0,
+        totalHours: 0,
+        onsiteHours: 0,
+        totalCommitment: 0,
+        employeesSet: new Set()
+      },
+      'office-eng': {
+        id: 'office-eng',
+        name: 'Office Engineering',
+        approvedLogsCount: 0,
+        totalHours: 0,
+        onsiteHours: 0,
+        totalCommitment: 0,
+        employeesSet: new Set()
+      },
+      'supervision': {
+        id: 'supervision',
+        name: 'Supervision Department',
+        approvedLogsCount: 0,
+        totalHours: 0,
+        onsiteHours: 0,
+        totalCommitment: 0,
+        employeesSet: new Set()
+      }
+    }
+
+    for (const log of rawLogs ?? []) {
+      const reviews: any[] = log.daily_work_log_reviews ?? []
+      const latestReview = reviews.sort(
+        (a: any, b: any) => new Date(b.reviewed_at).getTime() - new Date(a.reviewed_at).getTime()
+      )[0]
+
+      const approvalStatus = latestReview?.approval_status ?? log.approval_status ?? 'Pending'
+      const headComments = latestReview?.head_comments ?? log.head_comments ?? null
+
+      if (approvalStatus === 'Approved') {
+        const approvedLogItem = {
+          ...log,
+          daily_work_log_reviews: undefined,
+          approval_status: 'Approved',
+          head_comments: headComments
+        }
+        approvedLogs.push(approvedLogItem)
+
+        const compPct = Number(log.completion_percentage || 0)
+        totalCommitmentPercentage += compPct
+
+        // Group into departments (contract + procurement under Contract & Procurement Admin)
+        const empDeptId = (log.employees?.department_id ?? '').toLowerCase()
+        const empDeptName = (log.employees?.department ?? '').toLowerCase()
+
+        let deptKey = 'contract'
+        if (empDeptId === 'design' || empDeptName.includes('design')) {
+          deptKey = 'design'
+        } else if (empDeptId === 'office-eng' || empDeptId === 'office_eng' || empDeptName.includes('office')) {
+          deptKey = 'office-eng'
+        } else if (empDeptId === 'supervision' || empDeptName.includes('supervision')) {
+          deptKey = 'supervision'
+        }
+
+        if (departmentMap[deptKey]) {
+          const deptObj = departmentMap[deptKey]
+          deptObj.approvedLogsCount += 1
+          deptObj.totalHours += Number(log.hours_worked || 0)
+          deptObj.onsiteHours += Number(log.actual_working_hour || 0)
+          deptObj.totalCommitment += compPct
+          if (log.employees?.email) {
+            deptObj.employeesSet.add(log.employees.email)
+          }
+        }
+      }
+    }
+
+    const commitmentAverage = approvedLogs.length > 0
+      ? (totalCommitmentPercentage / approvedLogs.length) * 100
+      : 0
+
+    const departmentStats = Object.values(departmentMap).map(d => ({
+      id: d.id,
+      name: d.name,
+      approvedLogsCount: d.approvedLogsCount,
+      totalHours: Math.round(d.totalHours * 10) / 10,
+      onsiteHours: Math.round(d.onsiteHours * 10) / 10,
+      avgCommitment: d.approvedLogsCount > 0 ? Math.round((d.totalCommitment / d.approvedLogsCount) * 1000) / 10 : 0,
+      activeEmployeesCount: d.employeesSet.size
+    }))
 
     return NextResponse.json({
       metrics: {
@@ -146,12 +282,26 @@ export async function GET(request: Request) {
         overdueLetters,
         activeBonds,
         expiredOrReleasedBonds,
-        commitmentAverage: Math.round(commitmentAverage * 10) / 10, // round to 1 decimal place
-        unverifiedLogsCount
+        commitmentAverage: Math.round(commitmentAverage * 10) / 10,
+        totalApprovedLogs: approvedLogs.length,
+        totalEotClaims,
+        totalApprovedEotDays
       },
+      departmentStats,
+      eotAnalytics: {
+        totalClaims: totalEotClaims,
+        approvedDays: totalApprovedEotDays,
+        pendingCount: pendingEotCount,
+        approvedCount: approvedEotCount,
+        expiredCount: expiredEotCount,
+        expiringSoonCount: expiringSoonEotCount,
+        eots: processedEots
+      },
+      approvedLogs,
       alerts: {
         criticalExpiredBonds,
-        nearlyExpiredEots
+        nearlyExpiredEots,
+        overdueLettersList
       }
     })
   } catch (err) {

@@ -68,7 +68,7 @@ export async function GET(request: Request) {
     let query
 
     if (pendingOnly) {
-      if (currentEmp.role !== 'admin' && currentEmp.role !== 'dgm' && currentEmp.role !== 'manager') {
+      if (currentEmp.role !== 'admin' && currentEmp.role !== 'dgm' && currentEmp.role !== 'gm' && currentEmp.role !== 'manager') {
         return NextResponse.json({ error: 'Permission denied.' }, { status: 403 })
       }
       // Fetch all logs with their reviews so we can filter to only those whose
@@ -84,7 +84,7 @@ export async function GET(request: Request) {
       let queryEmployeeId = currentEmp.id
 
       if (targetEmployeeId && targetEmployeeId !== currentEmp.id) {
-        if (currentEmp.role !== 'admin' && currentEmp.role !== 'dgm' && currentEmp.role !== 'manager') {
+        if (currentEmp.role !== 'admin' && currentEmp.role !== 'dgm' && currentEmp.role !== 'gm' && currentEmp.role !== 'manager') {
           return NextResponse.json({ error: 'Permission denied.' }, { status: 403 })
         }
         if (currentEmp.role === 'manager') {
